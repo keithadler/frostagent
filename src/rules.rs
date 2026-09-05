@@ -233,7 +233,7 @@ fn destructive_severity(cmd: &str) -> Option<(Severity, String)> {
     }
     let after = &cmd[m.end()..];
     let targets: Vec<String> = after
-        .split(['\n', ';', '&', '|'])
+        .split(['\n', ';', '&', '|', '\''])
         .next()
         .unwrap_or("")
         .split_whitespace()
