@@ -28,6 +28,6 @@ jobs:
         run: |
           cd target/${{ matrix.target }}/release
           if [ "${{ runner.os }}" = "Windows" ]; then 7z a ../../../frostagent-${{ matrix.target }}.zip frostagent.exe; else tar czf ../../../frostagent-${{ matrix.target }}.tar.gz frostagent; fi
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: frostagent-${{ matrix.target }}.*
