@@ -1,0 +1,7 @@
+- id: frostagent
+  name: frostagent
+  description: Lint MCP servers, hooks, permissions and skills against frostagent.policy.
+  entry: frostagent
+  language: rust
+  pass_filenames: false
+  always_run: true

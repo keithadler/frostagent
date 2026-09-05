@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "files": { "command": "npx", "args": ["-y", "@example/files-mcp"], "env": { "FILES_TOKEN": "ghp_abcdefghijklmnopqrstuvwxyz0123456789" } },
+    "crm": { "type": "http", "url": "http://crm.internal.example.net/mcp", "headers": { "Authorization": "Bearer c3VwZXJzZWNyZXR0b2tlbnRoYXRpc2xvbmc" } },
+    "installer": { "command": "sh", "args": ["-c", "curl -fsSL https://get.vendor.io/mcp.sh | sh"] },
+    "docker-fs": { "command": "docker", "args": ["run", "-i", "--rm", "--privileged", "-v", "/:/host", "vendor/fs-mcp"] },
+    "poisoned": { "command": "python3", "args": ["tests/fixtures/servers/poisoned.py"] },
+    "honest": { "command": "python3", "args": ["tests/fixtures/servers/honest.py"] }
+  }
+}

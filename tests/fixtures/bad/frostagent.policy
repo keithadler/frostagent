@@ -1,0 +1,3 @@
+policy "bad-fixture"
+server "docker-fs" may unpinned-image          -- vendor publishes no tags
+forbid exec-surface

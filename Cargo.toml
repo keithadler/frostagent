@@ -1,0 +1,33 @@
+[package]
+name = "frostagent"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+authors = ["Keith Adler <keith.adler@icloud.com>"]
+description = "Deny-by-default capability linter for AI agent setups: MCP servers, hooks, permissions and skills. A one-screen policy says what the agent's tools may do; the check fails on anything else, and a lockfile fails on tools that change under you."
+repository = "https://github.com/keithadler/frostagent"
+homepage = "https://github.com/keithadler/frostagent"
+keywords = ["mcp", "security", "linter", "agents", "supply-chain"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[[bin]]
+name = "frostagent"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+regex = "1"
+sha2 = "0.10"
+ureq = { version = "2", features = ["json"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+
+[dev-dependencies]
+serde_json = "1"

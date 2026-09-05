@@ -1,0 +1,24 @@
+name: frostagent
+description: Deny-by-default capability linter for AI agent setups (MCP servers, hooks, permissions, skills).
+branding:
+  icon: shield
+  color: blue
+inputs:
+  args:
+    description: Arguments passed to frostagent, e.g. "probe --format github".
+    required: false
+    default: --format github
+  version:
+    description: Crate version to install.
+    required: false
+    default: "0.1.0"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        if ! command -v frostagent >/dev/null; then
+          cargo install frostagent --version "${{ inputs.version }}" --locked || cargo install --git https://github.com/keithadler/frostagent --tag "v${{ inputs.version }}"
+        fi
+    - shell: bash
+      run: frostagent ${{ inputs.args }}

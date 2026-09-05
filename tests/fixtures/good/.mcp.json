@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github@2025.4.8"], "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" } },
+    "remote": { "type": "http", "url": "https://mcp.vendor.io/mcp", "headers": { "Authorization": "Bearer ${VENDOR_TOKEN}" } }
+  }
+}

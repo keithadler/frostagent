@@ -1,0 +1,28 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
+      - name: self-check on the fixtures
+        shell: bash
+        run: |
+          ./target/release/frostagent scan tests/fixtures/good
+          ! ./target/release/frostagent scan tests/fixtures/bad
+      - name: probe the fixture servers
+        if: runner.os != 'Windows'
+        run: ./target/release/frostagent probe tests/fixtures/bad --only poisoned --only honest --lock /tmp/f.lock --exit-zero --verbose
