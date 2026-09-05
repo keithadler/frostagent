@@ -45,3 +45,10 @@ with `//` and `/* */` comments is accepted, as VS Code and Cursor write it.
 
 Not read: Continue's `config.yaml` (YAML), JetBrains' XML settings. Point
 frostagent at a JSON or TOML export, or open an issue with a sample.
+
+## Windows and Linux
+
+- Home is `HOME`, or `USERPROFILE` on Windows.
+- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS), `~/.config/Claude/claude_desktop_config.json` (Linux), `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
+- VS Code, Cline, Roo and Zed on Windows: under `%APPDATA%\Code\User\...` and `%APPDATA%\Zed\settings.json`; on Linux under `~/.config/Code/User/...` and `~/.config/zed/settings.json`.
+- Everything else uses the same dot-directory under the home directory on all three systems.

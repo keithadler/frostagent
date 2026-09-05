@@ -6,7 +6,7 @@
       "tool": {
         "driver": {
           "name": "frostagent",
-          "version": "0.1.0",
+          "version": "1.0.0",
           "informationUri": "https://github.com/keithadler/frostagent",
           "rules": [
             {
@@ -466,6 +466,69 @@
               },
               "defaultConfiguration": {
                 "level": "note"
+              }
+            },
+            {
+              "id": "tool-arg-shell",
+              "shortDescription": {
+                "text": "a tool argument is interpolated into a shell command string in the server's source, so anything that steers the model can run commands"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "tool-arg-eval",
+              "shortDescription": {
+                "text": "a tool argument reaches eval or code compilation in the server's source"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "tool-arg-exec",
+              "shortDescription": {
+                "text": "a tool argument is passed to a spawned process in the server's source"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "tool-arg-sql",
+              "shortDescription": {
+                "text": "a tool argument reaches a database query in the server's source"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "tool-arg-fs",
+              "shortDescription": {
+                "text": "a tool argument selects a filesystem path in the server's source"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "tool-arg-network",
+              "shortDescription": {
+                "text": "a tool argument selects a network destination in the server's source"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "probe-side-effect",
+              "shortDescription": {
+                "text": "a server created files under your home directory just by starting"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
               }
             }
           ]

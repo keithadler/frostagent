@@ -8,6 +8,7 @@ mod policy;
 mod probe;
 mod report;
 mod rules;
+mod taint;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -275,6 +276,10 @@ fn run(args: &Args) -> Result<ExitCode, String> {
                 let c = caps::extract(&root);
                 if c.files > 0 {
                     caps::findings(s, &c, &mut findings);
+                    let flows = taint::analyze(&root);
+                    if !flows.is_empty() {
+                        taint::findings(s, &flows, &mut findings);
+                    }
                     capabilities.push((s.name.clone(), c));
                 }
             }
@@ -336,6 +341,26 @@ fn run(args: &Args) -> Result<ExitCode, String> {
             }
             tools.extend(p.tools.iter().cloned());
             rules::check_probe_text(&p, &mut findings);
+            if !p.side_effects.is_empty() {
+                let shown: Vec<&str> = p.side_effects.iter().take(6).map(String::as_str).collect();
+                findings.push(rules::Finding {
+                    rule: "probe-side-effect",
+                    severity: rules::Severity::Warn,
+                    kind: "server",
+                    subject: s.name.clone(),
+                    message: format!(
+                        "created {}{} while starting, before any tool was called.",
+                        shown.join(", "),
+                        if p.side_effects.len() > 6 {
+                            format!(" and {} more", p.side_effects.len() - 6)
+                        } else {
+                            String::new()
+                        }
+                    ),
+                    source: Some(s.source.clone()),
+                    allowed_by: None,
+                });
+            }
             probes.push(p);
         }
         rules::check_tools(&tools, &mut findings);

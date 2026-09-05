@@ -94,6 +94,18 @@ A local server's source reads credential stores.
 
 **Fix:** A server should receive one token through env, not read `~/.ssh`, `~/.aws` or the keychain.
 
+### `tool-arg-shell`
+
+A tool argument is interpolated into a shell command string in the server's source, so anything that steers the model can run commands.
+
+**Fix:** Pass arguments as an array to spawn or execFile, never into a shell string. If the tool exists to run shell commands, say so: `server "name" may tool-arg-shell`.
+
+### `tool-arg-eval`
+
+A tool argument reaches eval or code compilation in the server's source.
+
+**Fix:** Do not evaluate model-controlled text. If the tool is a code interpreter by design, sandbox it and record the exception in the policy.
+
 ## WARN by default
 
 ### `unpinned-package`
@@ -240,6 +252,18 @@ A local server's source evaluates code at runtime.
 
 **Fix:** Look at what feeds the eval. If tool arguments can reach it, the model can run arbitrary code.
 
+### `tool-arg-exec`
+
+A tool argument is passed to a spawned process in the server's source.
+
+**Fix:** Expected for git and build tools. Check the argument cannot select the program itself, then allow it in the policy.
+
+### `probe-side-effect`
+
+A server created files under your home directory just by starting.
+
+**Fix:** Read what it wrote. Config and cache files are common; a generated client id and remote feature flags mean telemetry. Decide, then allow it in the policy or drop the server.
+
 ## INFO by default
 
 ### `hook-external-script`
@@ -313,4 +337,22 @@ Environment variables a local server's source reads.
 A local server's source writes files.
 
 **Fix:** Expected for filesystem servers. Check the paths are confined to the configured roots.
+
+### `tool-arg-sql`
+
+A tool argument reaches a database query in the server's source.
+
+**Fix:** Expected for database tools. Make sure the host confirms these calls and the database user is read-only where it can be.
+
+### `tool-arg-fs`
+
+A tool argument selects a filesystem path in the server's source.
+
+**Fix:** Expected for filesystem tools. Check the server confines paths to its configured roots.
+
+### `tool-arg-network`
+
+A tool argument selects a network destination in the server's source.
+
+**Fix:** Expected for fetch tools. Know that the model can point it at internal addresses.
 

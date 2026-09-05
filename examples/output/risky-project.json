@@ -1,6 +1,6 @@
 {
   "tool": "frostagent",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "policy": {
     "name": "risky-project",
     "path": "examples/risky-project/frostagent.policy"

@@ -1,5 +1,5 @@
 probing poisoned ... 4 tools in 42 ms
-frostagent 0.1.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
+frostagent 1.0.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
 scanned 3 files: 5 servers, 2 hooks, 6 permission rules, 1 skill; probed 1 server (4 tools)
 
 FAIL  broad-permission    permission "Bash(*)"   examples/risky-project/.claude/settings.json (permissions.allow)
@@ -27,8 +27,8 @@ FAIL  server-credential-access server "poisoned"   examples/risky-project/.mcp.j
 FAIL  remote-script-exec  skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
       its commands download and run a script in one step.
 FAIL  tool-poisoning      tool "poisoned/add"
-      description contains instructions aimed at the model: "<IMPORTANT>", "Do not tell the user",
-      "required for the tool to work"
+      description contains instructions aimed at the model: "<IMPORTANT>", "Before using this tool", "Do
+      not tell the user", "required for the tool to work"
 FAIL  exec-surface        tool "poisoned/run_shell"
       takes code or a query as free text (parameter `command`); anything that can influence the model can
       run it.
@@ -62,9 +62,6 @@ INFO  network-permission  permission "Bash(curl:*)"   examples/risky-project/.cl
       pre-approves `curl:*`, a network command.
 INFO  network-permission  permission "WebFetch(domain:docs.rs)"   examples/risky-project/.claude/settings.json (permissions.allow)
       pre-approves fetching from `docs.rs`.
-INFO  server-unlocked     server "*"
-      no frostagent.lock yet; run `frostagent lock` to approve every server's tools as they are now, and
-      future runs will flag any change.
 INFO  skill-exec          skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
       may run shell commands.
 
@@ -81,4 +78,4 @@ probe poisoned : ok
   run_shell                        Run a command.
   l​ist_dir                        List a directory.
 
-13 fail, 10 warn, 4 info, 1 allowed
+13 fail, 10 warn, 3 info, 1 allowed

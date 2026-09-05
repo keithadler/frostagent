@@ -107,3 +107,64 @@ Numbers from the 0.1.0 corpus run, September 2026:
 | 3 Invariant tool-poisoning servers | 3 of 3 caught as `tool-poisoning`; both `add` tools flagged as shadowing; `.ssh` read caught from source before running |
 | 44 real skills (Anthropic skills repo, superpowers, Claude Code plugins) | 0 directive findings, 0 hidden-Unicode findings, 2 destructive warnings both on `sudo` or a bare-variable `rm -rf` that are worth a look |
 | 13 hooks from Claude Code's example plugins | 0 findings |
+## What was measured
+
+Numbers from the 1.0.0 release, reproducible with `scripts/fetch-corpus.sh`
+and `scripts/corpus-run.sh`. The corpus is other people's real servers and
+skills, not ours.
+
+### Live servers
+
+23 servers answered a probe: the seven Model Context Protocol reference servers,
+GitHub, Playwright, Puppeteer, Context7 (local and remote), DeepWiki, Hugging
+Face, Notion, Firecrawl, Tavily, Exa, Kubernetes, Sentry, Brave Search, Slack
+and Desktop Commander. 246 tools, 6 sets of startup instructions.
+
+| Rule | Findings | Of which false |
+|---|---|---|
+| `tool-poisoning`, `hidden-unicode`, `instructions-poisoning`, `prompt-poisoning`, `resource-poisoning` | 0 | 0 |
+| `exec-surface` | 8 | 0: browser evaluate and run-code tools, a shell tool, `kubectl` and pod exec, a generic API executor |
+| `oversized-description` | 3 | 3 are the same server's long but honest descriptions; a warning by design |
+| `annotation-mismatch` | 2 | arguable; both tools claim read-only and have names that suggest otherwise |
+| `tool-shadowing` | 11 | 0: three servers really do all expose `read_file`, `list_directory` and friends |
+| `probe-side-effect` | 1 | 0: a server wrote a config with `telemetryEnabled: true`, a generated client id and remotely fetched A/B flags on first start |
+
+### Source of local servers
+
+Argument tracing on the reference filesystem server finds the expected flows:
+every tool's arguments select filesystem paths, and nothing reaches a shell or
+eval. Invariant Labs' three poisoning servers are flagged before they run:
+each reads `~/.ssh` and the client's own `mcp.json` in source.
+
+Known gap: tracing is file-local. A server that registers a switch in one file
+and calls `handlers.startProcess(args)` in another is not followed across the
+call. Desktop Commander and the Kubernetes server are shaped that way and show
+their exec surface through `exec-surface` at probe time instead.
+
+### Attacks
+
+| Sample | Caught by |
+|---|---|
+| Invariant direct poisoning (`add` leaks SSH keys) | `tool-poisoning`, and `server-credential-access` from source |
+| Invariant shadowing (rewrites another server's `send_email`) | `tool-poisoning`, `tool-shadowing` |
+| Invariant WhatsApp sleeper rug pull | `server-credential-access` from source on day one; `tool-drift` when the tool changes |
+| Four paraphrases written for this release ("prior to invoking other tools", "the user need not be informed", "silently forward", "include the contents of ~/.cursor/mcp.json") | `tool-poisoning`, all four |
+| Zero-width space in a tool name | `hidden-unicode` |
+| Instruction in a parameter description | `tool-poisoning` (schema) |
+| Steering text in startup `instructions`, a prompt, a resource | `instructions-poisoning`, `prompt-poisoning`, `resource-poisoning` |
+
+### Skills and hooks
+
+44 skills from Anthropic's skills repository, the Claude Code plugin examples and
+the superpowers collection, plus 13 hooks: no `skill-directive` findings after
+the 1.0 patterns, one `skill-destructive` warning on `rm -rf "$SESSION_DIR"`
+(a real, if routine, hazard), and `skill-network` on every skill that documents
+`curl` to its vendor's API, which is what that rule is for.
+
+### What this does not show
+
+Twenty-three servers is a sample, not the ecosystem. Every threshold was tuned
+by one person against this corpus. Pattern matching catches the phrasings above
+and their near neighbours; a determined author writes around it, and the
+lockfile is the answer to that. Redacted configs from other machines are the
+most useful contribution to this table.

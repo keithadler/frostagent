@@ -1,6 +1,6 @@
 # Sample output
 
-Generated from the example projects with `frostagent 0.1.0`; paths trimmed to
+Generated from the example projects with `frostagent 1.0.0`; paths trimmed to
 the repository root.
 
 | File | Command |

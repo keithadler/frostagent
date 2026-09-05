@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: keithadler/frostagent@v0.1
+      - uses: keithadler/frostagent@v1
         with:
           args: --format sarif --exit-zero > frostagent.sarif
       - uses: github/codeql-action/upload-sarif@v3

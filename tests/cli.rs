@@ -182,14 +182,22 @@ fn probe_finds_poisoned_tools_and_lock_detects_drift() {
         "tool-shadowing",
         "tool-url",
         "server-unlocked",
-        "probed 2 servers (6 tools)",
+        "probed 2 servers (10 tools)",
     ] {
         assert!(text.contains(want), "missing {want} in:\n{text}\n{err}");
     }
     // exec-surface was forbidden by the policy, so it is a FAIL.
     assert!(text.contains("FAIL  exec-surface"), "{text}");
-    // The pagination path returned all four tools of the poisoned server.
+    // The pagination path returned every tool of the poisoned server.
     assert!(text.contains("poisoned/run_shell"), "{text}");
+    // Paraphrased poisonings are all caught.
+    for t in ["poisoned/p1", "poisoned/p2", "poisoned/p3", "poisoned/p4"] {
+        assert!(
+            text.lines()
+                .any(|l| l.contains("tool-poisoning") && l.contains(t)),
+            "paraphrase {t} not caught:\n{text}"
+        );
+    }
     // Lock, then probe again: no drift.
     let out = bin()
         .arg("lock")
@@ -371,4 +379,89 @@ fn legacy_sse_transport_is_probed() {
             && out.contains("legacy/sse_tool"),
         "{out}\n{err}"
     );
+}
+
+#[test]
+fn baseline_hides_recorded_findings_and_explain_describes_rules() {
+    let dir = fixture("bad");
+    let base =
+        std::env::temp_dir().join(format!("frostagent-baseline-{}.json", std::process::id()));
+    let _ = std::fs::remove_file(&base);
+    let (code, _, err) = run(&[
+        "baseline",
+        dir.to_str().unwrap(),
+        "--baseline",
+        base.to_str().unwrap(),
+        "--policy",
+        dir.join("frostagent.policy").to_str().unwrap(),
+    ]);
+    assert_eq!(code, 0, "{err}");
+    assert!(err.contains("recorded"), "{err}");
+    let (code, out, _) = run(&[
+        "scan",
+        dir.to_str().unwrap(),
+        "--baseline",
+        base.to_str().unwrap(),
+        "--policy",
+        dir.join("frostagent.policy").to_str().unwrap(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "everything was baselined, so nothing active:\n{out}"
+    );
+    assert!(out.contains("0 fail, 0 warn"), "{out}");
+    let (_, out, _) = run(&[
+        "scan",
+        dir.to_str().unwrap(),
+        "--baseline",
+        base.to_str().unwrap(),
+        "--verbose",
+        "--policy",
+        dir.join("frostagent.policy").to_str().unwrap(),
+    ]);
+    assert!(out.contains("baseline"), "{out}");
+    let _ = std::fs::remove_file(&base);
+
+    let (code, out, _) = run(&["explain", "tool-arg-shell"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("FAIL by default")
+            && out.contains("How to fix it")
+            && out.contains("may tool-arg-shell"),
+        "{out}"
+    );
+    let (code, _, err) = run(&["explain", "nope"]);
+    assert_eq!(code, 2);
+    assert!(err.contains("unknown rule"), "{err}");
+    let (code, out, _) = run(&["rules", "--markdown"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.starts_with("# Rules") && out.contains("### `probe-side-effect`"),
+        "{out}"
+    );
+}
+
+#[cfg(not(windows))]
+#[test]
+fn source_tracing_reports_argument_flows() {
+    // A local server whose tool interpolates an argument into a shell string.
+    let tmp = std::env::temp_dir().join(format!("frostagent-taint-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join("server.py"), "from mcp.server.fastmcp import FastMCP\nimport subprocess\nmcp = FastMCP('x')\n\n@mcp.tool()\ndef run(command: str) -> str:\n    return subprocess.check_output(command, shell=True).decode()\n").unwrap();
+    std::fs::write(
+        tmp.join(".mcp.json"),
+        format!(
+            "{{\"mcpServers\": {{\"local\": {{\"command\": \"python3\", \"args\": [\"{}\"]}}}}}}",
+            tmp.join("server.py").display()
+        ),
+    )
+    .unwrap();
+    let (code, out, _) = run(&["scan", tmp.to_str().unwrap(), "--verbose"]);
+    assert_eq!(code, 1, "{out}");
+    assert!(
+        out.contains("tool-arg-shell") && out.contains("run: `command`"),
+        "{out}"
+    );
+    assert!(out.contains("server-exec"), "{out}");
+    let _ = std::fs::remove_dir_all(&tmp);
 }

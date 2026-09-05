@@ -8,6 +8,10 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 const PROTOCOLS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
+/// A server that streams more than this during a probe is not answering a list request.
+const MAX_STREAM_BYTES: u64 = 64 * 1024 * 1024;
+/// Largest single HTTP body accepted.
+const MAX_HTTP_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Expand `${VAR}` and `$VAR` from the parent environment, as the hosts do.
 pub fn expand_env(s: &str) -> String {
@@ -154,8 +158,10 @@ pub fn probe(s: &Server, timeout: Duration) -> Probe {
         prompts: Vec::new(),
         resources: Vec::new(),
         stderr: String::new(),
+        side_effects: Vec::new(),
         millis: 0,
     };
+    let before = home_snapshot();
     let r = match s.transport {
         Transport::Stdio => probe_stdio(s, timeout, &mut p),
         Transport::Http => probe_http(s, timeout, &mut p),
@@ -166,8 +172,43 @@ pub fn probe(s: &Server, timeout: Duration) -> Probe {
         Ok(()) => p.ok = true,
         Err(e) => p.error = Some(e),
     }
+    if s.transport == Transport::Stdio {
+        let after = home_snapshot();
+        p.side_effects = after.difference(&before).cloned().collect();
+    }
     p.millis = start.elapsed().as_millis();
     p
+}
+
+/// Names of the entries directly under the home directory and its common
+/// config folders. Cheap, and enough to notice a server that writes a config,
+/// cache or telemetry id the moment it starts.
+fn home_snapshot() -> std::collections::BTreeSet<String> {
+    let mut out = std::collections::BTreeSet::new();
+    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        return out;
+    };
+    let home = std::path::PathBuf::from(home);
+    for (dir, prefix) in [
+        (home.clone(), "~/"),
+        (home.join(".config"), "~/.config/"),
+        (home.join(".cache"), "~/.cache/"),
+        (home.join(".local/share"), "~/.local/share/"),
+        (
+            home.join("Library/Application Support"),
+            "~/Library/Application Support/",
+        ),
+        (home.join("Library/Caches"), "~/Library/Caches/"),
+        (home.join("Library/Preferences"), "~/Library/Preferences/"),
+        (home.join("Library/LaunchAgents"), "~/Library/LaunchAgents/"),
+    ] {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for e in rd.flatten() {
+                out.insert(format!("{prefix}{}", e.file_name().to_string_lossy()));
+            }
+        }
+    }
+    out
 }
 
 fn probe_stdio(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String> {
@@ -189,7 +230,7 @@ fn probe_stdio(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), Strin
 
     let (tx, rx) = mpsc::channel::<Result<String, String>>();
     std::thread::spawn(move || {
-        let mut r = BufReader::new(stdout);
+        let mut r = BufReader::new(std::io::Read::take(stdout, MAX_STREAM_BYTES));
         loop {
             let mut line = String::new();
             match r.read_line(&mut line) {
@@ -403,7 +444,12 @@ fn probe_http(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String
                     .map(String::from);
                 let status = resp.status();
                 let ct = resp.header("Content-Type").unwrap_or("").to_string();
-                let text = resp.into_string().map_err(|e| e.to_string())?;
+                let mut text = String::new();
+                std::io::Read::read_to_string(
+                    &mut std::io::Read::take(resp.into_reader(), MAX_HTTP_BYTES),
+                    &mut text,
+                )
+                .map_err(|e| e.to_string())?;
                 let text = if ct.contains("text/event-stream") {
                     sse_data(&text)
                 } else {
@@ -781,6 +827,35 @@ mod tests {
                 &serde_json::json!({"resources": [{"uri": t}], "resourceTemplates": [7]}),
                 "s",
             );
+        }
+    }
+
+    #[test]
+    fn parsers_never_panic() {
+        let mut seed: u64 = 0xD1B54A32D192ED03;
+        for _ in 0..3000 {
+            let mut t = String::new();
+            for _ in 0..(seed % 60) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                t.push(match seed % 14 {
+                    0 => '$',
+                    1 => '{',
+                    2 => '}',
+                    3 => ':',
+                    4 => '-',
+                    5 => '\n',
+                    6 => 'd',
+                    7 => 'a',
+                    8 => ' ',
+                    9 => '\u{1F600}',
+                    _ => (b'a' + (seed % 26) as u8) as char,
+                });
+            }
+            let _ = expand_env(&t);
+            let _ = sse_data(&t);
+            let _ = sse_data(&format!("data:{t}\n\n"));
         }
     }
 

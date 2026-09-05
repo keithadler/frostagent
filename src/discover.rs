@@ -26,7 +26,9 @@ pub struct Options {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 fn read_json(p: &Path, setup: &mut Setup) -> Option<Value> {
@@ -913,6 +915,20 @@ pub fn discover(opts: &Options) -> Setup {
                 let p = home.join(rel);
                 if p.exists() {
                     json_servers_file(&p, client, true, &mut setup);
+                }
+            }
+            if let Some(appdata) = std::env::var_os("APPDATA") {
+                let appdata = PathBuf::from(appdata);
+                for (rel, client) in [
+                    ("Code/User/mcp.json", "vscode"),
+                    ("Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", "cline"),
+                    ("Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json", "roo"),
+                    ("Zed/settings.json", "zed"),
+                ] {
+                    let p = appdata.join(rel);
+                    if p.exists() {
+                        json_servers_file(&p, client, true, &mut setup);
+                    }
                 }
             }
             let codex = home.join(".codex").join("config.toml");

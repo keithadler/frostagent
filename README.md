@@ -75,11 +75,17 @@ executable, about 3.5 MB, no runtime.
 From source, with Rust 1.75 or newer:
 
 ```
-cargo install --git https://github.com/keithadler/frostagent --tag v0.1.0
+cargo install --git https://github.com/keithadler/frostagent --tag v1.0.0
 ```
 
 A crates.io release and a Homebrew tap (`keithadler/frost`) follow once the
 first release has settled; the formula is drafted in `packaging/`.
+
+## Stability
+
+1.0 means the commands, flags, policy grammar, rule ids, lockfile, baseline and
+JSON output are stable for the 1.x series. [docs/compatibility.md](docs/compatibility.md)
+says exactly what that covers.
 
 ## Examples
 
@@ -173,7 +179,7 @@ Numbers from the corpus in [docs/threats.md](docs/threats.md), September 2026:
 ## In CI
 
 ```yaml
-- uses: keithadler/frostagent@v0.1
+- uses: keithadler/frostagent@v1
   with:
     args: probe --format github
 ```

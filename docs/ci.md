@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: keithadler/frostagent@v0.1
+      - uses: keithadler/frostagent@v1
         with:
           args: --format github
 ```
@@ -38,7 +38,7 @@ For code scanning:
 ```yaml
 repos:
   - repo: https://github.com/keithadler/frostagent
-    rev: v0.1.0
+    rev: v1.0.0
     hooks:
       - id: frostagent
 ```

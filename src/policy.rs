@@ -457,6 +457,46 @@ mod tests {
     }
 
     #[test]
+    fn parser_never_panics() {
+        let words = [
+            "policy",
+            "server",
+            "skill",
+            "\"x\"",
+            "may",
+            "forbid",
+            "trust",
+            "require",
+            "lock",
+            "in",
+            "until",
+            "2026-01-01",
+            "unpinned-package",
+            "--",
+            "#",
+            "\"",
+            "*",
+            "\n",
+            "everything",
+            "tool",
+            "9999-99-99",
+        ];
+        let mut seed: u64 = 0x2545F4914F6CDD1D;
+        for _ in 0..4000 {
+            let mut line = String::new();
+            for _ in 0..(seed % 9) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                line.push_str(words[(seed % words.len() as u64) as usize]);
+                line.push(' ');
+            }
+            let _ = Policy::parse(&line);
+            let _ = glob(&line, "server-x");
+        }
+    }
+
+    #[test]
     fn glob_works() {
         assert!(glob("*", "anything"));
         assert!(glob("mesh*", "Meshy"));

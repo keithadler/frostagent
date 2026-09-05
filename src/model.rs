@@ -203,5 +203,7 @@ pub struct Probe {
     pub resources: Vec<Resource>,
     /// Bytes the server wrote to stderr during the probe (truncated).
     pub stderr: String,
+    /// Entries that appeared under the home directory while the server ran.
+    pub side_effects: Vec<String>,
     pub millis: u128,
 }
