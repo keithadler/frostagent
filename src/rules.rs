@@ -1295,7 +1295,7 @@ pub fn check_tools(tools: &[Tool], out: &mut Vec<Finding>) {
                 "hidden-unicode",
                 "tool",
                 &subj,
-                format!("description or schema contains {}.", uni.join(", ")),
+                format!("name, description or schema contains {}.", uni.join(", ")),
                 None,
             ));
         }

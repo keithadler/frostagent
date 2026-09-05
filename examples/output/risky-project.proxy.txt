@@ -4,7 +4,7 @@ frostagent proxy: FAIL: tool-poisoning tool "poisoned/add": description contains
 frostagent proxy: WARN: annotation-mismatch tool "poisoned/delete_file": annotated readOnlyHint=true but its name starts with `delete`, a verb that changes something; a host may skip confirmation on the strength of that hint.
 frostagent proxy: FAIL: tool-poisoning tool "poisoned/run_shell": input schema contains instructions aimed at the model: "Ignore all previous instructions"
 frostagent proxy: FAIL: exec-surface tool "poisoned/run_shell": takes code or a query as free text (parameter `command`); anything that can influence the model can run it.
-frostagent proxy: FAIL: hidden-unicode tool "poisoned/l​ist_dir": description or schema contains U+200B zero width space at byte 1.
+frostagent proxy: FAIL: hidden-unicode tool "poisoned/l​ist_dir": name, description or schema contains U+200B zero width space at byte 1.
 frostagent proxy: enforce: removed 3 tools from the list the host sees: add, l​ist_dir, run_shell
 frostagent proxy: blocked: tools/call poisoned/add refused: the tool's description changed since it was approved or contains instructions aimed at the model
 frostagent proxy: stop: poisoned exited with 0
