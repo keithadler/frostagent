@@ -75,11 +75,19 @@ executable, about 3.5 MB, no runtime.
 From source, with Rust 1.75 or newer:
 
 ```
-cargo install --git https://github.com/keithadler/frostagent --tag v1.0.0
+cargo install --git https://github.com/keithadler/frostagent --tag v1.1.0
 ```
 
 A crates.io release and a Homebrew tap (`keithadler/frost`) follow once the
 first release has settled; the formula is drafted in `packaging/`.
+
+## What it is not
+
+- **Not a sandbox.** The linter tells you what your agent may do at check time. It does not stop Claude Code or Cursor from calling a tool that appeared after you approved the session. The proxy does, for the stdio servers you have put it in front of, and for nothing else.
+- **Probing runs other people's code.** `probe` and `lock` start every configured server with the env from your config. That is the point, and it is also the dangerous part. On a machine you do not fully trust, use `--only` to pick servers, and read the list frostagent prints before you answer yes.
+- **Source analysis is static.** It reads what is on disk. Minified bundles, code fetched at runtime and behaviour that starts after `tools/list` are outside it. Poisoned descriptions are the easy catch; a server that misbehaves in its results is what the proxy and the lockfile are for.
+- **Client coverage rots.** Claude Code, Cursor, Codex, Zed and Windsurf change their config formats. Each format has a fixture in the test suite so a break fails CI, and `frostagent clients` shows which files were read on your machine. If yours is missing, that is an issue worth filing.
+- **The measurements are a lab result.** Zero poisoning false positives on 23 servers we chose. On a real machine with nine servers, the first run produced auth notes, unpinned warnings and skill warnings that all needed a policy line. The cost of adoption is writing that policy and keeping the lockfile current, not installing the binary.
 
 ## Servers that need a sign-in
 

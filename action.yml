@@ -11,7 +11,7 @@ inputs:
   version:
     description: Crate version to install.
     required: false
-    default: '1.0.0'
+    default: '1.1.0'
 runs:
   using: composite
   steps:

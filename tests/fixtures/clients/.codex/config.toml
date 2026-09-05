@@ -1,0 +1,4 @@
+[mcp_servers.codex-server]
+command = "npx"
+args = ["-y", "pkg@2.0.0"]
+

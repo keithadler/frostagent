@@ -38,7 +38,7 @@ For code scanning:
 ```yaml
 repos:
   - repo: https://github.com/keithadler/frostagent
-    rev: v1.0.0
+    rev: v1.1.0
     hooks:
       - id: frostagent
 ```

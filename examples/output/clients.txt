@@ -1,0 +1,19 @@
+3 of 16 known config locations exist (add --user for per-user files):
+  found    claude-code          examples/risky-project/.mcp.json
+  found    claude-code          examples/risky-project/.claude/settings.json
+  missing  claude-code          examples/risky-project/.claude/settings.local.json
+  found    claude-code skills   examples/risky-project/.claude/skills
+  missing  claude-code plugins  examples/risky-project/.claude/plugins
+  missing  cursor               examples/risky-project/.cursor/mcp.json
+  missing  vscode               examples/risky-project/.vscode/mcp.json
+  missing  windsurf             examples/risky-project/.windsurf/mcp.json
+  missing  gemini               examples/risky-project/.gemini/settings.json
+  missing  zed                  examples/risky-project/.zed/settings.json
+  missing  opencode             examples/risky-project/opencode.json
+  missing  opencode             examples/risky-project/.opencode/opencode.json
+  missing  roo                  examples/risky-project/.roo/mcp.json
+  missing  kiro                 examples/risky-project/.kiro/settings/mcp.json
+  missing  amp                  examples/risky-project/amp.json
+  missing  codex                examples/risky-project/.codex/config.toml
+
+A client you use that is not listed is worth an issue: https://github.com/keithadler/frostagent/issues/new?template=client.yml

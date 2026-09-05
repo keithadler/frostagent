@@ -1,0 +1,1 @@
+{"context_servers": {"zed-server": {"command": {"path": "node", "args": ["z.js"], "env": {"A": "b"}}}}}

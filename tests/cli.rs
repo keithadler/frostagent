@@ -154,6 +154,7 @@ fn probe_finds_poisoned_tools_and_lock_detects_drift() {
     // Probe only the two python servers (the others would try npx/docker/curl).
     let policy = dir.join("frostagent.policy");
     let common = [
+        "--yes",
         "--only",
         "poisoned",
         "--only",
@@ -364,6 +365,7 @@ fn legacy_sse_transport_is_probed() {
     std::fs::write(tmp.join(".mcp.json"), format!(r#"{{"mcpServers": {{"legacy": {{"type": "sse", "url": "http://127.0.0.1:{port}/sse"}}}}}}"#)).unwrap();
     let (code, out, err) = run(&[
         "probe",
+        "--yes",
         tmp.to_str().unwrap(),
         "--verbose",
         "--timeout",
@@ -614,6 +616,7 @@ fn oauth_server_is_described_not_just_rejected() {
     std::fs::write(tmp.join(".mcp.json"), format!("{{\"mcpServers\": {{\"corp\": {{\"type\": \"http\", \"url\": \"http://127.0.0.1:{port}/mcp\"}}}}}}")).unwrap();
     let (code, out, _) = run(&[
         "probe",
+        "--yes",
         tmp.to_str().unwrap(),
         "--verbose",
         "--timeout",
@@ -633,6 +636,7 @@ fn oauth_server_is_described_not_just_rejected() {
     let out = bin()
         .args([
             "probe",
+            "--yes",
             tmp.to_str().unwrap(),
             "--verbose",
             "--timeout",
@@ -649,4 +653,44 @@ fn oauth_server_is_described_not_just_rejected() {
     let _ = child.kill();
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+#[test]
+fn clients_every_format_is_read() {
+    let dir = fixture("clients");
+    let (_, out, _) = run(&["scan", dir.to_str().unwrap(), "--format", "json"]);
+    let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+    let names: Vec<String> = v["setup"]["servers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["name"].as_str().unwrap().to_string())
+        .collect();
+    for want in [
+        "cc-server",
+        "cursor-server",
+        "vscode-server",
+        "windsurf-server",
+        "gemini-server",
+        "zed-server",
+        "opencode-server",
+        "roo-server",
+        "kiro-server",
+        "amp-server",
+        "codex-server",
+    ] {
+        assert!(
+            names.iter().any(|n| n == want),
+            "{want} not read; got {names:?}"
+        );
+    }
+    assert_eq!(v["setup"]["hooks"].as_array().unwrap().len(), 1);
+    let (code, out, _) = run(&["clients", dir.to_str().unwrap()]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("found  ")
+            && out.contains("codex")
+            && out.contains("known config locations exist"),
+        "{out}"
+    );
 }

@@ -1,0 +1,2 @@
+// vscode allows comments
+{"servers": {"vscode-server": {"type": "stdio", "command": "uvx", "args": ["pkg==1.0"]}}, "inputs": []}

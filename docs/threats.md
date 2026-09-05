@@ -109,7 +109,7 @@ Numbers from the 0.1.0 corpus run, September 2026:
 | 13 hooks from Claude Code's example plugins | 0 findings |
 ## What was measured
 
-Numbers from the 1.0.0 release, reproducible with `scripts/fetch-corpus.sh`
+Lab numbers from the 1.0 release, on servers and skills we picked, reproducible with `scripts/fetch-corpus.sh`
 and `scripts/corpus-run.sh`. The corpus is other people's real servers and
 skills, not ours.
 

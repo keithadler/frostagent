@@ -1,4 +1,4 @@
-frostagent 1.0.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
+frostagent 1.1.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
 scanned 3 files: 5 servers, 2 hooks, 6 permission rules, 1 skill
 
 FAIL  broad-permission    permission "Bash(*)"   examples/risky-project/.claude/settings.json (permissions.allow)

@@ -1,0 +1,1 @@
+{"mcp": {"opencode-server": {"type": "local", "command": ["bun", "x", "pkg"], "environment": {"K": "v"}}}}

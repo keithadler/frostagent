@@ -776,6 +776,73 @@ pub mod toml_subset {
     }
 }
 
+/// Every config location frostagent knows for a project and, with `user`, for the
+/// current user, with whether the file exists. For `frostagent clients`.
+pub fn candidate_files(opts: &Options) -> Vec<(String, PathBuf, bool)> {
+    let proj = &opts.project;
+    let mut out: Vec<(String, PathBuf)> = vec![
+        ("claude-code".into(), proj.join(".mcp.json")),
+        ("claude-code".into(), proj.join(".claude/settings.json")),
+        (
+            "claude-code".into(),
+            proj.join(".claude/settings.local.json"),
+        ),
+        ("claude-code skills".into(), proj.join(".claude/skills")),
+        ("claude-code plugins".into(), proj.join(".claude/plugins")),
+        ("cursor".into(), proj.join(".cursor/mcp.json")),
+        ("vscode".into(), proj.join(".vscode/mcp.json")),
+        ("windsurf".into(), proj.join(".windsurf/mcp.json")),
+        ("gemini".into(), proj.join(".gemini/settings.json")),
+        ("zed".into(), proj.join(".zed/settings.json")),
+        ("opencode".into(), proj.join("opencode.json")),
+        ("opencode".into(), proj.join(".opencode/opencode.json")),
+        ("roo".into(), proj.join(".roo/mcp.json")),
+        ("kiro".into(), proj.join(".kiro/settings/mcp.json")),
+        ("amp".into(), proj.join("amp.json")),
+        ("codex".into(), proj.join(".codex/config.toml")),
+    ];
+    if opts.user {
+        if let Some(home) = home() {
+            for (client, rel) in [
+                ("claude-code", ".claude.json"),
+                ("claude-code", ".claude/settings.json"),
+                ("claude-code", ".claude/settings.local.json"),
+                ("claude-code skills", ".claude/skills"),
+                ("claude-code plugins", ".claude/plugins"),
+                ("claude-desktop", "Library/Application Support/Claude/claude_desktop_config.json"),
+                ("claude-desktop", ".config/Claude/claude_desktop_config.json"),
+                ("cursor", ".cursor/mcp.json"),
+                ("gemini", ".gemini/settings.json"),
+                ("windsurf", ".codeium/windsurf/mcp_config.json"),
+                ("zed", ".config/zed/settings.json"),
+                ("opencode", ".config/opencode/opencode.json"),
+                ("amp", ".config/amp/settings.json"),
+                ("kiro", ".kiro/settings/mcp.json"),
+                ("vscode", "Library/Application Support/Code/User/mcp.json"),
+                ("cline", "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
+                ("roo", "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"),
+                ("vscode", ".config/Code/User/mcp.json"),
+                ("cline", ".config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
+                ("codex", ".codex/config.toml"),
+            ] {
+                out.push((client.into(), home.join(rel)));
+            }
+            if let Some(appdata) = std::env::var_os("APPDATA") {
+                let a = PathBuf::from(appdata);
+                for (client, rel) in [("claude-desktop", "Claude/claude_desktop_config.json"), ("vscode", "Code/User/mcp.json"), ("cline", "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"), ("roo", "Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"), ("zed", "Zed/settings.json")] {
+                    out.push((client.into(), a.join(rel)));
+                }
+            }
+        }
+    }
+    out.into_iter()
+        .map(|(c, p)| {
+            let exists = p.exists();
+            (c, p, exists)
+        })
+        .collect()
+}
+
 /// Discover everything for the given options.
 pub fn discover(opts: &Options) -> Setup {
     let mut setup = Setup::default();

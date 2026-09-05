@@ -25,4 +25,4 @@ jobs:
           ! ./target/release/frostagent scan tests/fixtures/bad
       - name: probe the fixture servers
         if: runner.os != 'Windows'
-        run: ./target/release/frostagent probe tests/fixtures/bad --only poisoned --only honest --lock /tmp/f.lock --exit-zero --verbose
+        run: ./target/release/frostagent probe --yes tests/fixtures/bad --only poisoned --only honest --lock /tmp/f.lock --exit-zero --verbose

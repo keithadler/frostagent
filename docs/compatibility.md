@@ -28,6 +28,7 @@ ways that break you:
   JSON-RPC error code `-32001` for refused calls, and the `[frostagent]` prefix
   on flagged results. Log line keys `ts`, `kind`, `message`, `detail`.
 - **Environment**: `FROSTAGENT_AUTH_<NAME>`, `NO_COLOR`.
+- **Confirmation**: `probe` and `lock` ask before starting servers unless `--yes` is given; in a non-interactive run without `--yes` they exit 2 having started nothing.
 
 What may change in a minor release: heuristics behind a rule (what text counts
 as steering, which hosts are placeholders), the set of config files discovered,

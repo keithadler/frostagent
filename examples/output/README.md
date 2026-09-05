@@ -1,6 +1,6 @@
 # Sample output
 
-Generated from the example projects with `frostagent 1.0.0`; paths trimmed to
+Generated from the example projects with `frostagent 1.1.0`; paths trimmed to
 the repository root.
 
 | File | Command |
@@ -14,4 +14,5 @@ the repository root.
 | `risky-project.github.txt` | `--format github` |
 | `risky-project.summary.txt` | `frostagent summary --policy examples/risky-project/frostagent.policy` |
 | `explain-tool-poisoning.txt` | `frostagent explain tool-poisoning` |
+| `clients.txt` | `frostagent clients examples/risky-project` |
 | `frostagent.lock.example` | `frostagent lock examples/risky-project --only poisoned` |

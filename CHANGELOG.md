@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.0
+
+- **Probe asks first.** `probe` and `lock` print the servers they are about to
+  start, with their launch commands, and wait for a yes at a terminal. In a
+  script, pass `--yes`. Starting servers runs other people's code with your
+  environment; that should never happen as a side effect.
+- **`frostagent clients`** lists every config location frostagent knows for the
+  project and, with `--user`, for you, and which ones exist. Each client format
+  has a fixture in the test suite, so a parser that stops reading a format
+  fails CI instead of silently reading nothing.
+- README gains a "What it is not" section: not a sandbox, probing runs code,
+  source analysis is static, client coverage rots, the measurements are a lab
+  result.
+
+
 ## 1.0.0
 
 Interfaces are now stable; see `docs/compatibility.md` for what that promises.

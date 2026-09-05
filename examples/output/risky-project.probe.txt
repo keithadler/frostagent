@@ -1,5 +1,5 @@
-probing poisoned ... 4 tools in 32 ms
-frostagent 1.0.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
+probing poisoned ... 4 tools in 36 ms
+frostagent 1.1.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
 scanned 3 files: 5 servers, 2 hooks, 6 permission rules, 1 skill; probed 1 server (4 tools)
 
 FAIL  broad-permission    permission "Bash(*)"   examples/risky-project/.claude/settings.json (permissions.allow)

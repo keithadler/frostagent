@@ -1,4 +1,4 @@
-frostagent 1.0.0 — policy "clean-project" (examples/clean-project/frostagent.policy)
+frostagent 1.1.0 — policy "clean-project" (examples/clean-project/frostagent.policy)
 scanned 2 files: 3 servers, 1 hook, 6 permission rules, 0 skills
 
 

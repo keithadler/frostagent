@@ -25,6 +25,7 @@ USAGE
   frostagent init  [dir]                write a starter frostagent.policy from what is found
   frostagent summary [--policy FILE]    read the policy back in plain English
   frostagent rules [--markdown]         list every rule with its default severity
+  frostagent clients [dir] [--user]     list every config file frostagent looks for and which exist here
   frostagent explain <rule>             what a rule means and how to fix or allow it
   frostagent baseline [dir] [options]   record today's findings so only new ones are reported
   frostagent proxy <server> [dir] [--enforce] [--log FILE]
@@ -42,11 +43,13 @@ OPTIONS
   --baseline FILE      hide findings recorded in this file (default: frostagent.baseline.json if present)
   --color MODE         auto (default), always, never; NO_COLOR is honored
   --no-source          skip reading the source of local servers (and of npx packages in the npm cache)
+  --yes, -y            probe and lock: start the listed servers without asking
   --enforce            proxy only: drop drifted or poisoned tools, refuse calls to them, flag injected results
   --log FILE           proxy only: append one JSON line per event to FILE
   --verbose            show allowed findings and every probed tool
 
-Nothing is uploaded. Probing runs the servers exactly as your agent would, with their configured env.
+Nothing is uploaded. Probing runs the servers exactly as your agent would, with their configured env:
+it executes other people's code on your machine, so it lists them and asks first unless you pass --yes.
 ";
 
 struct Args {
@@ -68,6 +71,7 @@ struct Args {
     rest: Vec<String>,
     enforce: bool,
     log: Option<PathBuf>,
+    yes: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -90,6 +94,7 @@ fn parse_args() -> Result<Args, String> {
         rest: vec![],
         enforce: false,
         log: None,
+        yes: false,
     };
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -142,6 +147,7 @@ fn parse_args() -> Result<Args, String> {
             "--markdown" => a.markdown = true,
             "--no-source" => a.no_source = true,
             "--enforce" => a.enforce = true,
+            "--yes" | "-y" => a.yes = true,
             "--log" => {
                 a.log = Some(PathBuf::from(take("--log")?));
                 i += 1;
@@ -171,6 +177,7 @@ fn parse_args() -> Result<Args, String> {
                 | "explain"
                 | "baseline"
                 | "proxy"
+                | "clients"
         ) {
             a.cmd = positional.remove(0);
         }
@@ -273,6 +280,32 @@ fn run(args: &Args) -> Result<ExitCode, String> {
         }
         _ => {}
     }
+    if args.cmd == "clients" {
+        let files = discover::candidate_files(&discover::Options {
+            user: args.user,
+            project: args.dir.clone(),
+        });
+        let found = files.iter().filter(|(_, _, e)| *e).count();
+        println!(
+            "{found} of {} known config locations exist{}:",
+            files.len(),
+            if args.user {
+                ""
+            } else {
+                " (add --user for per-user files)"
+            }
+        );
+        for (client, path, exists) in &files {
+            println!(
+                "  {}  {:<20} {}",
+                if *exists { "found  " } else { "missing" },
+                client,
+                model::shorten_home(path)
+            );
+        }
+        println!("\nA client you use that is not listed is worth an issue: https://github.com/keithadler/frostagent/issues/new?template=client.yml");
+        return Ok(ExitCode::SUCCESS);
+    }
 
     let setup = discover::discover(&discover::Options {
         user: args.user,
@@ -373,6 +406,31 @@ fn run(args: &Args) -> Result<ExitCode, String> {
 
     let mut probes: Vec<model::Probe> = Vec::new();
     if args.cmd == "probe" || args.cmd == "lock" {
+        let to_run: Vec<&model::Server> = setup
+            .servers
+            .iter()
+            .filter(|s| args.only.is_empty() || args.only.iter().any(|o| policy::glob(o, &s.name)))
+            .collect();
+        if !args.yes && !to_run.is_empty() {
+            eprintln!("frostagent will start {} server{} with the env from your config. That runs other people's code on this machine:", to_run.len(), if to_run.len() == 1 { "" } else { "s" });
+            for s in &to_run {
+                eprintln!(
+                    "  {:<24} {}",
+                    s.name,
+                    s.url.clone().unwrap_or_else(|| s.command_line())
+                );
+            }
+            if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+                eprint!("Continue? [y/N] ");
+                let mut line = String::new();
+                let _ = std::io::stdin().read_line(&mut line);
+                if !matches!(line.trim(), "y" | "Y" | "yes") {
+                    return Err("stopped before starting any server. Pass --yes to skip this question, or --only NAME to pick servers.".into());
+                }
+            } else {
+                return Err("not a terminal; pass --yes to confirm starting these servers, or --only NAME to pick some.".into());
+            }
+        }
         let timeout = Duration::from_secs(args.timeout);
         let mut tools: Vec<model::Tool> = Vec::new();
         for s in &setup.servers {
