@@ -68,11 +68,33 @@ means and how to fix or allow it, or read [docs/rules.md](docs/rules.md).
 
 ## Install
 
+Binaries for macOS (Apple silicon and Intel), Linux and Windows are on the
+[releases page](https://github.com/keithadler/frostagent/releases). One static
+executable, about 3.5 MB, no runtime.
+
+From source, with Rust 1.75 or newer:
+
 ```
-cargo install frostagent
+cargo install --git https://github.com/keithadler/frostagent --tag v0.1.0
 ```
 
-or a binary from the releases page. One static executable, about 3.5 MB, no runtime.
+A crates.io release and a Homebrew tap (`keithadler/frost`) follow once the
+first release has settled; the formula is drafted in `packaging/`.
+
+## Examples
+
+[`examples/clean-project`](examples/clean-project) passes with nothing to
+waive. [`examples/risky-project`](examples/risky-project) has one of everything,
+each finding explained, and lists [`examples/poisoned-server`](examples/poisoned-server),
+a runnable stdlib server that carries every published poisoning technique so
+you can see the report without finding a real one. [`examples/output`](examples/output)
+holds the text, JSON, SARIF and GitHub output for each, and a sample lockfile.
+[`examples/ci`](examples/ci) has the workflow and pre-commit files.
+
+```
+frostagent examples/risky-project
+frostagent probe examples/risky-project
+```
 
 ## Use
 

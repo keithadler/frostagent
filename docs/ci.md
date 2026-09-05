@@ -3,7 +3,8 @@
 ## GitHub Actions
 
 The repository ships a composite action. It installs the binary with cargo
-and runs it with the arguments you give.
+from the tagged source (about two minutes on a cold runner; cache `~/.cargo`
+to make it seconds) and runs it with the arguments you give.
 
 ```yaml
 name: frostagent

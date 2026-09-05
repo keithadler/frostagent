@@ -1,0 +1,877 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "frostagent",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/keithadler/frostagent",
+          "rules": [
+            {
+              "id": "unpinned-package",
+              "shortDescription": {
+                "text": "a server is launched from a package registry without a pinned version, so the next run may execute different code"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "unpinned-image",
+              "shortDescription": {
+                "text": "a container image without a digest or fixed tag"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "plain-http",
+              "shortDescription": {
+                "text": "a remote server is reached over plain http, so tool results and any token can be read or altered in transit"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "plaintext-secret",
+              "shortDescription": {
+                "text": "a token or key is written literally into a config file instead of referenced from the environment"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "secret-in-args",
+              "shortDescription": {
+                "text": "a token is passed on the command line, where every process on the machine can read it"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "remote-script-exec",
+              "shortDescription": {
+                "text": "a command downloads a script and runs it in one step"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "privileged-container",
+              "shortDescription": {
+                "text": "a container runs with host-level access"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "untrusted-location",
+              "shortDescription": {
+                "text": "a server binary lives in a temporary or download folder"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "dangerous-flag",
+              "shortDescription": {
+                "text": "a command disables its own safety checks"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "hook-network",
+              "shortDescription": {
+                "text": "an automatic hook talks to the network, so tool input or output may leave the machine"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "hook-destructive",
+              "shortDescription": {
+                "text": "an automatic hook can delete or overwrite data"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "hook-sudo",
+              "shortDescription": {
+                "text": "an automatic hook escalates privileges"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "hook-eval",
+              "shortDescription": {
+                "text": "an automatic hook evaluates text it received, which the model or a tool result controls"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "hook-external-script",
+              "shortDescription": {
+                "text": "an automatic hook runs a script that lives outside the project"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "broad-permission",
+              "shortDescription": {
+                "text": "a permission rule allows a whole tool without limits"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "dangerous-permission",
+              "shortDescription": {
+                "text": "a permission rule pre-approves a destructive or privileged command"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "permissive-mode",
+              "shortDescription": {
+                "text": "the permission mode skips confirmation"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "network-permission",
+              "shortDescription": {
+                "text": "a permission rule pre-approves network access"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "skill-directive",
+              "shortDescription": {
+                "text": "a skill contains text aimed at steering the model against the user"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "hidden-unicode",
+              "shortDescription": {
+                "text": "invisible or direction-changing characters that can hide instructions from a reader"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "skill-network",
+              "shortDescription": {
+                "text": "a skill's commands reach the network"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "skill-links",
+              "shortDescription": {
+                "text": "hosts a skill links to in prose"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "skill-secret-access",
+              "shortDescription": {
+                "text": "a skill reads credential files or asks for secrets"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "skill-destructive",
+              "shortDescription": {
+                "text": "a skill's commands can delete data or escalate privileges"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "broad-skill-tools",
+              "shortDescription": {
+                "text": "a skill is allowed an unrestricted tool"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "skill-exec",
+              "shortDescription": {
+                "text": "a skill ships scripts or is allowed to run commands"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "tool-poisoning",
+              "shortDescription": {
+                "text": "a tool description contains instructions aimed at the model rather than a description of the tool"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "tool-url",
+              "shortDescription": {
+                "text": "a tool description names a URL, which is where data goes when a poisoned tool exfiltrates"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "oversized-description",
+              "shortDescription": {
+                "text": "a tool description is far longer than its peers, a common place to bury instructions"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "tool-shadowing",
+              "shortDescription": {
+                "text": "two servers expose the same tool name, so the model may call the wrong one"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "tool-lookalike",
+              "shortDescription": {
+                "text": "a tool name is one edit away from another server's tool"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "annotation-mismatch",
+              "shortDescription": {
+                "text": "a tool claims to be read-only while its name says it writes"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "exec-surface",
+              "shortDescription": {
+                "text": "a tool takes a command, script or query as free text"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "destructive-unmarked",
+              "shortDescription": {
+                "text": "a tool that deletes or removes is not annotated as destructive"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "instructions-poisoning",
+              "shortDescription": {
+                "text": "the server's initialize instructions, which the host hands to the model, contain steering text"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "server-instructions",
+              "shortDescription": {
+                "text": "the server sends instructions to the model at startup; read them"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "prompt-poisoning",
+              "shortDescription": {
+                "text": "a prompt template's description or arguments contain steering text or hidden characters"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "resource-poisoning",
+              "shortDescription": {
+                "text": "a resource description contains steering text or hidden characters"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "tool-drift",
+              "shortDescription": {
+                "text": "a tool's description or schema changed since it was locked"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "tool-added",
+              "shortDescription": {
+                "text": "a server exposes a tool that is not in the lockfile"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "tool-removed",
+              "shortDescription": {
+                "text": "a locked tool is no longer exposed"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "server-unlocked",
+              "shortDescription": {
+                "text": "a server has no entry in the lockfile yet"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "probe-failed",
+              "shortDescription": {
+                "text": "a server could not be started or did not answer"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "config-error",
+              "shortDescription": {
+                "text": "a config file exists but could not be parsed"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "policy-expired",
+              "shortDescription": {
+                "text": "a policy exception has passed its date"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "server-exec",
+              "shortDescription": {
+                "text": "a local server's source spawns processes"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "server-eval",
+              "shortDescription": {
+                "text": "a local server's source evaluates code at runtime"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "server-credential-access",
+              "shortDescription": {
+                "text": "a local server's source reads credential stores"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "server-network",
+              "shortDescription": {
+                "text": "hosts a local server's source connects to"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "server-env",
+              "shortDescription": {
+                "text": "environment variables a local server's source reads"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "server-fs-write",
+              "shortDescription": {
+                "text": "a local server's source writes files"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "unpinned-package",
+          "level": "warning",
+          "message": {
+            "text": "server \"files\": `npx -y @example/files-mcp` fetches `@example/files-mcp` at whatever version the registry serves today. Pin it: `@example/files-mcp@<version>`."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "plaintext-secret",
+          "level": "error",
+          "message": {
+            "text": "server \"files\": env `FILES_TOKEN` holds a literal secret (matches a known token format, 40 chars). Reference it instead: \"FILES_TOKEN\": \"${FILES_TOKEN}\"."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "plain-http",
+          "level": "error",
+          "message": {
+            "text": "server \"crm\": `http://crm.internal.example.net/mcp` is plain http. Use https, or the token in the header travels in the clear."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "plaintext-secret",
+          "level": "error",
+          "message": {
+            "text": "server \"crm\": header `Authorization` holds a literal credential (matches a known token format, 42 chars). Reference it instead: \"Authorization\": \"Bearer ${CRM_TOKEN}\"."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "remote-script-exec",
+          "level": "error",
+          "message": {
+            "text": "server \"installer\": `sh -c curl -fsSL https://get.vendor.io/mcp.sh | sh` downloads and runs a script in one step."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "privileged-container",
+          "level": "warning",
+          "message": {
+            "text": "server \"docker-fs\": container runs with host access: `-i --rm --privileged -v /:/host vendor/fs-mcp`."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "hook-network",
+          "level": "warning",
+          "message": {
+            "text": "hook \"PreToolUse:Bash\": hook reaches the network (telemetry.vendor.io); whatever the hook reads from stdin, which includes tool input, can leave the machine."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "hook-eval",
+          "level": "warning",
+          "message": {
+            "text": "hook \"PostToolUse:Edit\": `eval \"$(jq -r .tool_input.file_path)\"` evaluates text it received; tool input is attacker-influenced."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "broad-permission",
+          "level": "error",
+          "message": {
+            "text": "permission \"Bash(*)\": pre-approves any shell command. Scope it: `Bash(npm test:*)`, `Bash(git status:*)`."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "dangerous-permission",
+          "level": "error",
+          "message": {
+            "text": "permission \"Bash(sudo rm -rf /var/lib/app:*)\": pre-approves `sudo rm -rf /var/lib/app:*`, which can destroy data or escalate privileges, with no confirmation."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "network-permission",
+          "level": "note",
+          "message": {
+            "text": "permission \"Bash(curl:*)\": pre-approves `curl:*`, a network command."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "broad-permission",
+          "level": "error",
+          "message": {
+            "text": "permission \"mcp__*\": pre-approves every tool of every MCP server, including ones added later."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "network-permission",
+          "level": "note",
+          "message": {
+            "text": "permission \"WebFetch(domain:docs.rs)\": pre-approves fetching from `docs.rs`."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "permissive-mode",
+          "level": "warning",
+          "message": {
+            "text": "permission \"defaultMode=bypassPermissions\": default mode `bypassPermissions` runs every tool without confirmation."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/settings.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "skill-secret-access",
+          "level": "warning",
+          "message": {
+            "text": "skill \"deploy\": asks the user for a credential: \"Paste your API key\"."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/skills/deploy/SKILL.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "remote-script-exec",
+          "level": "error",
+          "message": {
+            "text": "skill \"deploy\": its commands download and run a script in one step."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/skills/deploy/SKILL.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "skill-secret-access",
+          "level": "warning",
+          "message": {
+            "text": "skill \"deploy\": its commands touch a credential store: `~/.aws/credentials`."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/skills/deploy/SKILL.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "skill-network",
+          "level": "warning",
+          "message": {
+            "text": "skill \"deploy\": its commands reach the network: get.vendor.io."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/skills/deploy/SKILL.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "broad-skill-tools",
+          "level": "warning",
+          "message": {
+            "text": "skill \"deploy\": allowed-tools grants `Bash` without limits."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/skills/deploy/SKILL.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "skill-exec",
+          "level": "note",
+          "message": {
+            "text": "skill \"deploy\": may run shell commands."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.claude/skills/deploy/SKILL.md"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "server-credential-access",
+          "level": "error",
+          "message": {
+            "text": "server \"poisoned\": source at examples/poisoned-server/server.py references credential stores: .ssh/ (server.py)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "examples/risky-project/.mcp.json"
+                },
+                "region": {
+                  "startLine": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

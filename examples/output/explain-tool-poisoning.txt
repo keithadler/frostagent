@@ -1,0 +1,12 @@
+tool-poisoning  (FAIL by default)
+
+What it means
+  a tool description contains instructions aimed at the model rather than a description of the tool.
+
+How to fix it
+  Remove the server. A description that tells the model to call other tools, hide things, or send data somewhere is an attack, not a bug.
+
+How to allow it, once you have decided it is fine
+  server "<name>" may tool-poisoning          -- or skill / hook / permission / tool
+  everything may tool-poisoning
+

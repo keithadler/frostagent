@@ -18,7 +18,8 @@ runs:
     - shell: bash
       run: |
         if ! command -v frostagent >/dev/null; then
-          cargo install frostagent --version "${{ inputs.version }}" --locked || cargo install --git https://github.com/keithadler/frostagent --tag "v${{ inputs.version }}"
+          cargo install --git https://github.com/keithadler/frostagent --tag "v${{ inputs.version }}" --locked \
+            || cargo install frostagent --version "${{ inputs.version }}" --locked
         fi
     - shell: bash
       run: frostagent ${{ inputs.args }}

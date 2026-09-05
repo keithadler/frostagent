@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "servers": {
+    "poisoned": {
+      "launch": "python3 examples/poisoned-server/server.py",
+      "locked_at": "2026-09-05",
+      "tools": {
+        "add": "2db9193a4eba6952d1ba4cd63ff8a04dc8f04275f50338156e98d9b97d18af1a",
+        "delete_file": "63585576c36fc2a18e164d166bcd1f9a7820fbec69abc6d80cf591474176c629",
+        "l​ist_dir": "f3390a420c135ccabfad3e36f4c99349b14dd1eedc64d5ec79db820eeadad7c6",
+        "run_shell": "7319149cf2d437071079a40f8cf4d2e41d7121a5a768bd5a4b7a7c97f5080727"
+      },
+      "instructions": "eb8d11919f1e14270a889a77343b12c386a2ffa7d2555facb34e7d4a650935ac"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+name: Client or config format
+description: an agent client whose config frostagent does not read
+labels: [client]
+body:
+  - type: input
+    id: client
+    attributes:
+      label: Client and version
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Where the file lives and a sample
+      description: Path on disk and a redacted example.
+      render: json
+    validations:
+      required: true

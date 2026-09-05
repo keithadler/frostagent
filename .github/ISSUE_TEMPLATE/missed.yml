@@ -1,0 +1,16 @@
+name: Missed finding
+description: something frostagent should have caught and did not
+labels: [missed]
+body:
+  - type: textarea
+    id: input
+    attributes:
+      label: The config, tool description or skill text
+      description: Replace real tokens with ${VAR}. If it is a live attack, consider SECURITY.md instead.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected it to say

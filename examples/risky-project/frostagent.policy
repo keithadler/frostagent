@@ -1,0 +1,5 @@
+policy "risky-project"
+-- One waiver, to show what an accepted exception looks like in the report:
+server "docker-fs" may unpinned-image until 2026-12-31   -- vendor publishes no tags; asked in vendor/fs-mcp#12
+-- And one escalation: in this repo a tool that takes free-text code is a failure, not a note.
+forbid exec-surface

@@ -1,0 +1,4 @@
+Policy "risky-project".
+Everything is a finding until a line here says otherwise.
+- server "docker-fs" may unpinned-image until 2026-12-31: a container image without a digest or fixed tag.
+- exec-surface is a failure, not a warning: a tool takes a command, script or query as free text.

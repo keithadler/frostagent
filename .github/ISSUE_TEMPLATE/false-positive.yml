@@ -1,0 +1,23 @@
+name: False positive
+description: frostagent reported something that is fine
+labels: [false-positive]
+body:
+  - type: textarea
+    id: finding
+    attributes:
+      label: The finding
+      description: Paste the FAIL/WARN/INFO lines. Replace any real token with ${VAR}.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is fine
+      description: What the server, hook or skill actually does.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: frostagent --version

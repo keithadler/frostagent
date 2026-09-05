@@ -1,0 +1,4 @@
+policy "clean-project"
+-- Nothing to allow: pinned packages, tokens by reference, scoped permissions, a hook that runs a
+-- committed script. This file exists so the check has a name and so `require lock` applies.
+require lock

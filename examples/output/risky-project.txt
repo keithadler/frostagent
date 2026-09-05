@@ -1,0 +1,60 @@
+frostagent 0.1.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
+scanned 3 files: 5 servers, 2 hooks, 6 permission rules, 1 skill
+
+FAIL  broad-permission    permission "Bash(*)"   examples/risky-project/.claude/settings.json (permissions.allow)
+      pre-approves any shell command. Scope it: `Bash(npm test:*)`, `Bash(git status:*)`.
+FAIL  dangerous-permission permission "Bash(sudo rm -rf /var/lib/app:*)"   examples/risky-project/.claude/settings.json (permissions.allow)
+      pre-approves `sudo rm -rf /var/lib/app:*`, which can destroy data or escalate privileges, with no
+      confirmation.
+FAIL  broad-permission    permission "mcp__*"   examples/risky-project/.claude/settings.json (permissions.allow)
+      pre-approves every tool of every MCP server, including ones added later.
+FAIL  plain-http          server "crm"   examples/risky-project/.mcp.json (mcpServers.crm)
+      `http://crm.internal.example.net/mcp` is plain http. Use https, or the token in the header travels
+      in the clear.
+FAIL  plaintext-secret    server "crm"   examples/risky-project/.mcp.json (mcpServers.crm)
+      header `Authorization` holds a literal credential (matches a known token format, 42 chars).
+      Reference it instead: "Authorization": "Bearer ${CRM_TOKEN}".
+FAIL  plaintext-secret    server "files"   examples/risky-project/.mcp.json (mcpServers.files)
+      env `FILES_TOKEN` holds a literal secret (matches a known token format, 40 chars). Reference it
+      instead: "FILES_TOKEN": "${FILES_TOKEN}".
+FAIL  remote-script-exec  server "installer"   examples/risky-project/.mcp.json (mcpServers.installer)
+      `sh -c curl -fsSL https://get.vendor.io/mcp.sh | sh` downloads and runs a script in one step.
+FAIL  server-credential-access server "poisoned"   examples/risky-project/.mcp.json (mcpServers.poisoned)
+      source at examples/poisoned-server/server.py references credential stores: .ssh/ (server.py).
+FAIL  remote-script-exec  skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
+      its commands download and run a script in one step.
+WARN  hook-eval           hook "PostToolUse:Edit"   examples/risky-project/.claude/settings.json (hooks.PostToolUse)
+      `eval "$(jq -r .tool_input.file_path)"` evaluates text it received; tool input is
+      attacker-influenced.
+WARN  hook-network        hook "PreToolUse:Bash"   examples/risky-project/.claude/settings.json (hooks.PreToolUse)
+      hook reaches the network (telemetry.vendor.io); whatever the hook reads from stdin, which includes
+      tool input, can leave the machine.
+WARN  permissive-mode     permission "defaultMode=bypassPermissions"   examples/risky-project/.claude/settings.json (permissions.defaultMode)
+      default mode `bypassPermissions` runs every tool without confirmation.
+WARN  privileged-container server "docker-fs"   examples/risky-project/.mcp.json (mcpServers.docker-fs)
+      container runs with host access: `-i --rm --privileged -v /:/host vendor/fs-mcp`.
+WARN  unpinned-package    server "files"   examples/risky-project/.mcp.json (mcpServers.files)
+      `npx -y @example/files-mcp` fetches `@example/files-mcp` at whatever version the registry serves
+      today. Pin it: `@example/files-mcp@<version>`.
+WARN  broad-skill-tools   skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
+      allowed-tools grants `Bash` without limits.
+WARN  skill-network       skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
+      its commands reach the network: get.vendor.io.
+WARN  skill-secret-access skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
+      asks the user for a credential: "Paste your API key".
+WARN  skill-secret-access skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
+      its commands touch a credential store: `~/.aws/credentials`.
+INFO  network-permission  permission "Bash(curl:*)"   examples/risky-project/.claude/settings.json (permissions.allow)
+      pre-approves `curl:*`, a network command.
+INFO  network-permission  permission "WebFetch(domain:docs.rs)"   examples/risky-project/.claude/settings.json (permissions.allow)
+      pre-approves fetching from `docs.rs`.
+INFO  skill-exec          skill "deploy"   examples/risky-project/.claude/skills/deploy/SKILL.md
+      may run shell commands.
+
+allowed by policy or baseline:
+  ok    unpinned-image      server "docker-fs"   ← server "docker-fs" may unpinned-image until 2026-12-31
+
+source poisoned : 1 file at examples/poisoned-server/server.py
+  credentials  .ssh/ (server.py)
+
+9 fail, 9 warn, 3 info, 1 allowed

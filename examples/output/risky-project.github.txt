@@ -1,0 +1,22 @@
+::warning file=examples/risky-project/.mcp.json,line=1,title=unpinned-package server "files"::`npx -y @example/files-mcp` fetches `@example/files-mcp` at whatever version the registry serves today. Pin it: `@example/files-mcp@<version>`.
+::error file=examples/risky-project/.mcp.json,line=1,title=plaintext-secret server "files"::env `FILES_TOKEN` holds a literal secret (matches a known token format, 40 chars). Reference it instead: "FILES_TOKEN": "${FILES_TOKEN}".
+::error file=examples/risky-project/.mcp.json,line=1,title=plain-http server "crm"::`http://crm.internal.example.net/mcp` is plain http. Use https, or the token in the header travels in the clear.
+::error file=examples/risky-project/.mcp.json,line=1,title=plaintext-secret server "crm"::header `Authorization` holds a literal credential (matches a known token format, 42 chars). Reference it instead: "Authorization": "Bearer ${CRM_TOKEN}".
+::error file=examples/risky-project/.mcp.json,line=1,title=remote-script-exec server "installer"::`sh -c curl -fsSL https://get.vendor.io/mcp.sh | sh` downloads and runs a script in one step.
+::warning file=examples/risky-project/.mcp.json,line=1,title=privileged-container server "docker-fs"::container runs with host access: `-i --rm --privileged -v /:/host vendor/fs-mcp`.
+::warning file=examples/risky-project/.claude/settings.json,line=1,title=hook-network hook "PreToolUse:Bash"::hook reaches the network (telemetry.vendor.io); whatever the hook reads from stdin, which includes tool input, can leave the machine.
+::warning file=examples/risky-project/.claude/settings.json,line=1,title=hook-eval hook "PostToolUse:Edit"::`eval "$(jq -r .tool_input.file_path)"` evaluates text it received; tool input is attacker-influenced.
+::error file=examples/risky-project/.claude/settings.json,line=1,title=broad-permission permission "Bash(*)"::pre-approves any shell command. Scope it: `Bash(npm test:*)`, `Bash(git status:*)`.
+::error file=examples/risky-project/.claude/settings.json,line=1,title=dangerous-permission permission "Bash(sudo rm -rf /var/lib/app:*)"::pre-approves `sudo rm -rf /var/lib/app:*`, which can destroy data or escalate privileges, with no confirmation.
+::notice file=examples/risky-project/.claude/settings.json,line=1,title=network-permission permission "Bash(curl:*)"::pre-approves `curl:*`, a network command.
+::error file=examples/risky-project/.claude/settings.json,line=1,title=broad-permission permission "mcp__*"::pre-approves every tool of every MCP server, including ones added later.
+::notice file=examples/risky-project/.claude/settings.json,line=1,title=network-permission permission "WebFetch(domain:docs.rs)"::pre-approves fetching from `docs.rs`.
+::warning file=examples/risky-project/.claude/settings.json,line=1,title=permissive-mode permission "defaultMode=bypassPermissions"::default mode `bypassPermissions` runs every tool without confirmation.
+::warning file=examples/risky-project/.claude/skills/deploy/SKILL.md,line=1,title=skill-secret-access skill "deploy"::asks the user for a credential: "Paste your API key".
+::error file=examples/risky-project/.claude/skills/deploy/SKILL.md,line=1,title=remote-script-exec skill "deploy"::its commands download and run a script in one step.
+::warning file=examples/risky-project/.claude/skills/deploy/SKILL.md,line=1,title=skill-secret-access skill "deploy"::its commands touch a credential store: `~/.aws/credentials`.
+::warning file=examples/risky-project/.claude/skills/deploy/SKILL.md,line=1,title=skill-network skill "deploy"::its commands reach the network: get.vendor.io.
+::warning file=examples/risky-project/.claude/skills/deploy/SKILL.md,line=1,title=broad-skill-tools skill "deploy"::allowed-tools grants `Bash` without limits.
+::notice file=examples/risky-project/.claude/skills/deploy/SKILL.md,line=1,title=skill-exec skill "deploy"::may run shell commands.
+::error file=examples/risky-project/.mcp.json,line=1,title=server-credential-access server "poisoned"::source at examples/poisoned-server/server.py references credential stores: .ssh/ (server.py).
+frostagent: 9 fail, 9 warn, 3 info, 1 allowed by policy

@@ -1,0 +1,12 @@
+# .github/workflows/frostagent.yml
+name: frostagent
+on: [push, pull_request]
+jobs:
+  frostagent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: keithadler/frostagent@v0.1
+        with:
+          # Static scan with inline annotations. Add `probe` to start servers; pass their tokens as job secrets.
+          args: --format github
