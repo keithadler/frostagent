@@ -4,4 +4,4 @@ from mcp_stub import serve
 serve([
   {"name": "read_file", "description": "Read a file from disk.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}, "annotations": {"readOnlyHint": True}},
   {"name": "list_dir", "description": "List a directory.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}, "annotations": {"readOnlyHint": True}},
-], name="honest")
+], name="honest", instructions="Use read_file for text files under the workspace.", prompts=[{"name": "review", "description": "Review a file for style.", "arguments": []}])

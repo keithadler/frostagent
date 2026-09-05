@@ -12,6 +12,12 @@ pub struct LockedServer {
     pub locked_at: String,
     /// tool name -> fingerprint
     pub tools: BTreeMap<String, String>,
+    /// prompt name -> fingerprint
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub prompts: BTreeMap<String, String>,
+    /// fingerprint of the initialize instructions, if any
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -47,12 +53,21 @@ impl Lock {
             for t in &p.tools {
                 tools.insert(t.name.clone(), t.fingerprint());
             }
+            let mut prompts = BTreeMap::new();
+            for pr in &p.prompts {
+                prompts.insert(pr.name.clone(), pr.fingerprint());
+            }
             self.servers.insert(
                 p.server.clone(),
                 LockedServer {
                     launch: launches.get(&p.server).cloned().unwrap_or_default(),
                     locked_at: format!("{y:04}-{m:02}-{d:02}"),
                     tools,
+                    prompts,
+                    instructions: p
+                        .instructions
+                        .as_ref()
+                        .map(|i| crate::model::fingerprint(&[i])),
                 },
             );
         }
@@ -94,6 +109,40 @@ impl Lock {
                         allowed_by: None,
                     });
                 }
+            }
+            for pr in &p.prompts {
+                match locked.prompts.get(&pr.name) {
+                    None if !locked.prompts.is_empty() || locked.instructions.is_some() => out
+                        .push(Finding {
+                            rule: "tool-added",
+                            severity: Severity::Warn,
+                            kind: "prompt",
+                            subject: format!("{}/{}", p.server, pr.name),
+                            message: "prompt is not in the lockfile.".into(),
+                            source: None,
+                            allowed_by: None,
+                        }),
+                    Some(fp) if *fp != pr.fingerprint() => out.push(Finding {
+                        rule: "tool-drift",
+                        severity: Severity::Fail,
+                        kind: "prompt",
+                        subject: format!("{}/{}", p.server, pr.name),
+                        message: format!(
+                            "prompt changed since it was locked on {}.",
+                            locked.locked_at
+                        ),
+                        source: None,
+                        allowed_by: None,
+                    }),
+                    _ => {}
+                }
+            }
+            let now_ins = p
+                .instructions
+                .as_ref()
+                .map(|i| crate::model::fingerprint(&[i]));
+            if locked.instructions.is_some() && now_ins != locked.instructions {
+                out.push(Finding { rule: "tool-drift", severity: Severity::Fail, kind: "server", subject: p.server.clone(), message: format!("initialize instructions changed since they were locked on {}. Read them again before approving.", locked.locked_at), source: None, allowed_by: None });
             }
         }
     }

@@ -139,22 +139,53 @@ pub struct Tool {
 
 impl Tool {
     pub fn fingerprint(&self) -> String {
-        use sha2::{Digest, Sha256};
-        let mut h = Sha256::new();
-        h.update(self.name.as_bytes());
-        h.update([0]);
-        h.update(self.description.as_bytes());
-        h.update([0]);
-        h.update(self.input_schema.to_string().as_bytes());
-        h.update([0]);
-        h.update(self.annotations.to_string().as_bytes());
-        let d = h.finalize();
-        d.iter().map(|b| format!("{b:02x}")).collect()
+        fingerprint(&[
+            &self.name,
+            &self.description,
+            &self.input_schema.to_string(),
+            &self.annotations.to_string(),
+        ])
     }
 
     pub fn annotation_bool(&self, key: &str) -> Option<bool> {
         self.annotations.get(key).and_then(|v| v.as_bool())
     }
+}
+
+/// A prompt template a server offers. Its text is read by the model verbatim.
+#[derive(Debug, Clone, Serialize)]
+pub struct Prompt {
+    pub server: String,
+    pub name: String,
+    pub description: String,
+    pub arguments: serde_json::Value,
+}
+
+impl Prompt {
+    pub fn fingerprint(&self) -> String {
+        fingerprint(&[&self.name, &self.description, &self.arguments.to_string()])
+    }
+}
+
+/// A resource or resource template a server offers.
+#[derive(Debug, Clone, Serialize)]
+pub struct Resource {
+    pub server: String,
+    pub uri: String,
+    pub name: String,
+    pub description: String,
+}
+
+pub fn fingerprint(parts: &[&str]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    for (i, p) in parts.iter().enumerate() {
+        if i > 0 {
+            h.update([0]);
+        }
+        h.update(p.as_bytes());
+    }
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Result of probing one server.
@@ -165,7 +196,11 @@ pub struct Probe {
     pub error: Option<String>,
     pub server_info: Option<serde_json::Value>,
     pub protocol_version: Option<String>,
+    /// `instructions` from the initialize result: text the host hands to the model.
+    pub instructions: Option<String>,
     pub tools: Vec<Tool>,
+    pub prompts: Vec<Prompt>,
+    pub resources: Vec<Resource>,
     /// Bytes the server wrote to stderr during the probe (truncated).
     pub stderr: String,
     pub millis: u128,

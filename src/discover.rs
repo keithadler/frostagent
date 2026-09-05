@@ -135,6 +135,9 @@ pub fn servers_from(
 ) {
     let Some(map) = obj.as_object() else { return };
     for (name, v) in map {
+        if !v.is_object() {
+            continue;
+        }
         let ty = v
             .get("type")
             .and_then(|t| t.as_str())
@@ -142,28 +145,59 @@ pub fn servers_from(
         let url = v
             .get("url")
             .or_else(|| v.get("serverUrl"))
+            .or_else(|| v.get("httpUrl"))
             .and_then(|u| u.as_str())
             .map(String::from);
-        let command = v.get("command").and_then(|c| c.as_str()).map(String::from);
+        // Zed nests the launch under "command": {"path", "args", "env"}; OpenCode gives "command" as an array.
+        let (command, extra_args, zed_env) = match v.get("command") {
+            Some(Value::String(c)) => (Some(c.clone()), Vec::new(), None),
+            Some(Value::Array(a)) => {
+                let all: Vec<String> = a
+                    .iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect();
+                (
+                    all.first().cloned(),
+                    all.iter().skip(1).cloned().collect(),
+                    None,
+                )
+            }
+            Some(Value::Object(o)) => (
+                o.get("path").and_then(|c| c.as_str()).map(String::from),
+                str_vec(o.get("args")),
+                Some(str_map(o.get("env"))),
+            ),
+            _ => (None, Vec::new(), None),
+        };
         let transport = match ty.as_deref() {
-            Some("stdio") => Transport::Stdio,
-            Some("http") | Some("streamable-http") | Some("streamable_http") => Transport::Http,
+            Some("stdio") | Some("local") => Transport::Stdio,
+            Some("http") | Some("streamable-http") | Some("streamable_http") | Some("remote") => {
+                Transport::Http
+            }
             Some("sse") => Transport::Sse,
             _ if command.is_some() => Transport::Stdio,
             _ if url.is_some() => Transport::Http,
             _ => Transport::Unknown,
         };
+        let mut args = str_vec(v.get("args"));
+        if args.is_empty() {
+            args = extra_args;
+        }
+        let mut env = zed_env.unwrap_or_else(|| str_map(v.get("env")));
+        if env.is_empty() {
+            env = str_map(v.get("environment"));
+        }
         out.push(Server {
             name: name.clone(),
             source: Source {
                 file: source_file.to_path_buf(),
-                location: format!("{location}mcpServers.{name}"),
+                location: format!("{location}{name}"),
                 user_level,
             },
             transport,
             command,
-            args: str_vec(v.get("args")),
-            env: str_map(v.get("env")),
+            args,
+            env,
             url,
             headers: str_map(v.get("headers")),
             client: client.to_string(),
@@ -242,7 +276,14 @@ fn settings_from(v: &Value, file: &Path, user_level: bool, setup: &mut Setup) {
         }
     }
     if let Some(ms) = v.get("mcpServers") {
-        servers_from(ms, file, "", user_level, "claude-code", &mut setup.servers);
+        servers_from(
+            ms,
+            file,
+            "mcpServers.",
+            user_level,
+            "claude-code",
+            &mut setup.servers,
+        );
     }
 }
 
@@ -392,7 +433,14 @@ fn plugin_dir(dir: &Path, user_level: bool, setup: &mut Setup) {
     if mcp.exists() {
         if let Some(v) = read_json(&mcp, setup) {
             let obj = v.get("mcpServers").unwrap_or(&v);
-            servers_from(obj, &mcp, "", user_level, "plugin", &mut setup.servers);
+            servers_from(
+                obj,
+                &mcp,
+                "mcpServers.",
+                user_level,
+                "plugin",
+                &mut setup.servers,
+            );
         }
     }
     let hooks = dir.join("hooks").join("hooks.json");
@@ -439,6 +487,293 @@ fn walk_plugins(root: &Path, user_level: bool, setup: &mut Setup, depth: usize) 
     }
 }
 
+/// Read a JSON file that holds servers under one of the known keys.
+fn json_servers_file(p: &Path, client: &str, user_level: bool, setup: &mut Setup) {
+    let Some(v) = read_json(p, setup) else { return };
+    // Zed: "context_servers"; VS Code: "servers"; OpenCode: "mcp"; Amp: "amp.mcpServers"; most others: "mcpServers".
+    for (key, prefix) in [
+        ("mcpServers", "mcpServers."),
+        ("servers", "servers."),
+        ("context_servers", "context_servers."),
+        ("mcp", "mcp."),
+        ("amp.mcpServers", "amp.mcpServers."),
+    ] {
+        if let Some(obj) = v.get(key) {
+            if obj.is_object() {
+                servers_from(obj, p, prefix, user_level, client, &mut setup.servers);
+            }
+        }
+    }
+    if v.get("hooks").is_some() || v.get("permissions").is_some() {
+        settings_from(&v, p, user_level, setup);
+    }
+}
+
+/// Codex keeps servers in TOML: `[mcp_servers.<name>]` tables with command, args, env, url.
+fn toml_servers_file(p: &Path, user_level: bool, setup: &mut Setup) {
+    let Ok(text) = std::fs::read_to_string(p) else {
+        return;
+    };
+    setup.files.push(p.to_path_buf());
+    match toml_subset::parse(&text) {
+        Ok(v) => {
+            if let Some(ms) = v.get("mcp_servers") {
+                servers_from(
+                    ms,
+                    p,
+                    "mcp_servers.",
+                    user_level,
+                    "codex",
+                    &mut setup.servers,
+                );
+            }
+        }
+        Err(e) => setup.errors.push(format!("{}: {e}", shorten_home(p))),
+    }
+}
+
+/// Just enough TOML for agent configs: tables, dotted table headers, strings,
+/// numbers, booleans, arrays, inline tables. Produces serde_json values.
+pub mod toml_subset {
+    use serde_json::{json, Map, Value};
+
+    pub fn parse(text: &str) -> Result<Value, String> {
+        let mut root = Map::new();
+        let mut path: Vec<String> = Vec::new();
+        let mut lines = text.lines().enumerate().peekable();
+        while let Some((n, raw)) = lines.next() {
+            let line = strip_comment(raw).trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Some(h) = line.strip_prefix("[[") {
+                // arrays of tables: treat as a table keyed by index
+                let name = h.trim_end_matches(']').trim();
+                path = split_key(name);
+                continue;
+            }
+            if let Some(h) = line.strip_prefix('[') {
+                let name = h.trim_end_matches(']').trim();
+                path = split_key(name);
+                ensure_table(&mut root, &path);
+                continue;
+            }
+            let (k, v) = line
+                .split_once('=')
+                .ok_or_else(|| format!("line {}: expected `key = value`", n + 1))?;
+            let mut value_text = v.trim().to_string();
+            // Multi-line arrays and inline tables.
+            while (value_text.starts_with('[') && !balanced(&value_text, '[', ']'))
+                || (value_text.starts_with('{') && !balanced(&value_text, '{', '}'))
+                || value_text.starts_with("\"\"\"") && value_text.matches("\"\"\"").count() < 2
+            {
+                let Some((_, next)) = lines.next() else { break };
+                value_text.push('\n');
+                value_text.push_str(strip_comment(next).trim());
+            }
+            let value =
+                parse_value(value_text.trim()).map_err(|e| format!("line {}: {e}", n + 1))?;
+            let mut full = path.clone();
+            full.extend(split_key(k.trim()));
+            insert(&mut root, &full, value);
+        }
+        Ok(Value::Object(root))
+    }
+
+    fn balanced(s: &str, open: char, close: char) -> bool {
+        let mut depth = 0i32;
+        let mut in_str = false;
+        for c in s.chars() {
+            if c == '"' {
+                in_str = !in_str;
+            } else if !in_str {
+                if c == open {
+                    depth += 1;
+                } else if c == close {
+                    depth -= 1;
+                }
+            }
+        }
+        depth <= 0
+    }
+
+    fn strip_comment(s: &str) -> &str {
+        let mut in_str = false;
+        for (i, c) in s.char_indices() {
+            if c == '"' {
+                in_str = !in_str;
+            } else if c == '#' && !in_str {
+                return &s[..i];
+            }
+        }
+        s
+    }
+
+    fn split_key(k: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut cur = String::new();
+        let mut in_q = false;
+        for c in k.chars() {
+            match c {
+                '"' | '\'' => in_q = !in_q,
+                '.' if !in_q => out.push(std::mem::take(&mut cur)),
+                c if c.is_whitespace() && !in_q => {}
+                c => cur.push(c),
+            }
+        }
+        if !cur.is_empty() {
+            out.push(cur);
+        }
+        out
+    }
+
+    fn ensure_table(root: &mut Map<String, Value>, path: &[String]) {
+        let mut cur = root;
+        for k in path {
+            let e = cur.entry(k.clone()).or_insert_with(|| json!({}));
+            if !e.is_object() {
+                *e = json!({});
+            }
+            cur = e.as_object_mut().unwrap();
+        }
+    }
+
+    fn insert(root: &mut Map<String, Value>, path: &[String], v: Value) {
+        if path.is_empty() {
+            return;
+        }
+        ensure_table(root, &path[..path.len() - 1]);
+        let mut cur = root;
+        for k in &path[..path.len() - 1] {
+            cur = cur.get_mut(k).unwrap().as_object_mut().unwrap();
+        }
+        cur.insert(path[path.len() - 1].clone(), v);
+    }
+
+    pub fn parse_value(s: &str) -> Result<Value, String> {
+        let s = s.trim();
+        if let Some(rest) = s.strip_prefix("\"\"\"") {
+            return Ok(Value::String(
+                rest.trim_end_matches("\"\"\"")
+                    .trim_start_matches('\n')
+                    .to_string(),
+            ));
+        }
+        if s.starts_with('"') {
+            return parse_basic_string(s).map(Value::String);
+        }
+        if s.starts_with('\'') {
+            return Ok(Value::String(s.trim_matches('\'').to_string()));
+        }
+        if s == "true" || s == "false" {
+            return Ok(Value::Bool(s == "true"));
+        }
+        if s.starts_with('[') {
+            let inner = s
+                .strip_prefix('[')
+                .and_then(|x| x.strip_suffix(']'))
+                .ok_or("unterminated array")?;
+            return Ok(Value::Array(
+                split_top(inner)?
+                    .into_iter()
+                    .map(|e| parse_value(&e))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ));
+        }
+        if s.starts_with('{') {
+            let inner = s
+                .strip_prefix('{')
+                .and_then(|x| x.strip_suffix('}'))
+                .ok_or("unterminated inline table")?;
+            let mut m = Map::new();
+            for pair in split_top(inner)? {
+                let (k, v) = pair
+                    .split_once('=')
+                    .ok_or("inline table needs key = value")?;
+                let key = split_key(k.trim()).pop().unwrap_or_default();
+                m.insert(key, parse_value(v)?);
+            }
+            return Ok(Value::Object(m));
+        }
+        if let Ok(n) = s.replace('_', "").parse::<i64>() {
+            return Ok(json!(n));
+        }
+        if let Ok(x) = s.parse::<f64>() {
+            return Ok(json!(x));
+        }
+        Ok(Value::String(s.to_string()))
+    }
+
+    fn parse_basic_string(s: &str) -> Result<String, String> {
+        let mut out = String::new();
+        let mut chars = s[1..].chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => return Ok(out),
+                '\\' => match chars.next() {
+                    Some('n') => out.push('\n'),
+                    Some('t') => out.push('\t'),
+                    Some('r') => out.push('\r'),
+                    Some('"') => out.push('"'),
+                    Some('\\') => out.push('\\'),
+                    Some('u') => {
+                        let hex: String = chars.by_ref().take(4).collect();
+                        if let Some(ch) =
+                            u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)
+                        {
+                            out.push(ch);
+                        }
+                    }
+                    Some(o) => {
+                        out.push('\\');
+                        out.push(o);
+                    }
+                    None => break,
+                },
+                c => out.push(c),
+            }
+        }
+        Err("unterminated string".into())
+    }
+
+    /// Split on top-level commas, respecting strings, brackets and braces.
+    fn split_top(s: &str) -> Result<Vec<String>, String> {
+        let mut out = Vec::new();
+        let mut cur = String::new();
+        let mut depth = 0i32;
+        let mut in_str = false;
+        let mut prev = ' ';
+        for c in s.chars() {
+            if c == '"' && prev != '\\' {
+                in_str = !in_str;
+            }
+            if !in_str {
+                match c {
+                    '[' | '{' => depth += 1,
+                    ']' | '}' => depth -= 1,
+                    ',' if depth == 0 => {
+                        let t = cur.trim().to_string();
+                        if !t.is_empty() {
+                            out.push(t);
+                        }
+                        cur.clear();
+                        prev = c;
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            cur.push(c);
+            prev = c;
+        }
+        let t = cur.trim().to_string();
+        if !t.is_empty() {
+            out.push(t);
+        }
+        Ok(out)
+    }
+}
+
 /// Discover everything for the given options.
 pub fn discover(opts: &Options) -> Setup {
     let mut setup = Setup::default();
@@ -449,7 +784,14 @@ pub fn discover(opts: &Options) -> Setup {
     if mcp.exists() {
         if let Some(v) = read_json(&mcp, &mut setup) {
             let obj = v.get("mcpServers").unwrap_or(&v);
-            servers_from(obj, &mcp, "", false, "claude-code", &mut setup.servers);
+            servers_from(
+                obj,
+                &mcp,
+                "mcpServers.",
+                false,
+                "claude-code",
+                &mut setup.servers,
+            );
         }
     }
     for name in ["settings.json", "settings.local.json"] {
@@ -466,17 +808,21 @@ pub fn discover(opts: &Options) -> Setup {
         (".vscode/mcp.json", "vscode"),
         (".windsurf/mcp.json", "windsurf"),
         (".gemini/settings.json", "gemini"),
+        (".zed/settings.json", "zed"),
+        ("opencode.json", "opencode"),
+        (".opencode/opencode.json", "opencode"),
+        (".roo/mcp.json", "roo"),
+        (".kiro/settings/mcp.json", "kiro"),
+        ("amp.json", "amp"),
     ] {
         let p = proj.join(rel);
         if p.exists() {
-            if let Some(v) = read_json(&p, &mut setup) {
-                let obj = v
-                    .get("mcpServers")
-                    .or_else(|| v.get("servers"))
-                    .unwrap_or(&v);
-                servers_from(obj, &p, "", false, client, &mut setup.servers);
-            }
+            json_servers_file(&p, client, false, &mut setup);
         }
+    }
+    let codex_proj = proj.join(".codex").join("config.toml");
+    if codex_proj.exists() {
+        toml_servers_file(&codex_proj, false, &mut setup);
     }
     // Plugins vendored in the project.
     let proj_plugins = proj.join(".claude").join("plugins");
@@ -490,7 +836,14 @@ pub fn discover(opts: &Options) -> Setup {
             if cj.exists() {
                 if let Some(v) = read_json(&cj, &mut setup) {
                     if let Some(ms) = v.get("mcpServers") {
-                        servers_from(ms, &cj, "", true, "claude-code", &mut setup.servers);
+                        servers_from(
+                            ms,
+                            &cj,
+                            "mcpServers.",
+                            true,
+                            "claude-code",
+                            &mut setup.servers,
+                        );
                     }
                     if let Some(projects) = v.get("projects").and_then(|p| p.as_object()) {
                         let here = proj.display().to_string();
@@ -529,16 +882,39 @@ pub fn discover(opts: &Options) -> Setup {
             if desktop.exists() {
                 if let Some(v) = read_json(&desktop, &mut setup) {
                     if let Some(ms) = v.get("mcpServers") {
-                        servers_from(ms, &desktop, "", true, "claude-desktop", &mut setup.servers);
+                        servers_from(
+                            ms,
+                            &desktop,
+                            "mcpServers.",
+                            true,
+                            "claude-desktop",
+                            &mut setup.servers,
+                        );
                     }
                 }
             }
-            let cursor = home.join(".cursor").join("mcp.json");
-            if cursor.exists() {
-                if let Some(v) = read_json(&cursor, &mut setup) {
-                    let obj = v.get("mcpServers").unwrap_or(&v);
-                    servers_from(obj, &cursor, "", true, "cursor", &mut setup.servers);
+            for (rel, client) in [
+                (".cursor/mcp.json", "cursor"),
+                (".gemini/settings.json", "gemini"),
+                (".codeium/windsurf/mcp_config.json", "windsurf"),
+                (".config/zed/settings.json", "zed"),
+                (".config/opencode/opencode.json", "opencode"),
+                (".config/amp/settings.json", "amp"),
+                (".kiro/settings/mcp.json", "kiro"),
+                ("Library/Application Support/Code/User/mcp.json", "vscode"),
+                ("Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", "cline"),
+                ("Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json", "roo"),
+                (".config/Code/User/mcp.json", "vscode"),
+                (".config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json", "cline"),
+            ] {
+                let p = home.join(rel);
+                if p.exists() {
+                    json_servers_file(&p, client, true, &mut setup);
                 }
+            }
+            let codex = home.join(".codex").join("config.toml");
+            if codex.exists() {
+                toml_servers_file(&codex, true, &mut setup);
             }
         }
     }
@@ -579,6 +955,104 @@ mod tests {
         let (f, b) = split_frontmatter("no front");
         assert_eq!(f, "");
         assert_eq!(b, "no front");
+    }
+
+    #[test]
+    fn toml_codex() {
+        let t = r#"
+model = "o3"   # comment
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = { GITHUB_TOKEN = "${GITHUB_TOKEN}", DEBUG = "1" }
+
+[mcp_servers.remote]
+url = "https://mcp.vendor.io/mcp"
+headers = { Authorization = "Bearer abc" }
+[mcp_servers.multi]
+command = "uvx"
+args = [
+  "mcp-server-fetch",
+]
+"#;
+        let v = toml_subset::parse(t).unwrap();
+        let mut out = Vec::new();
+        servers_from(
+            &v["mcp_servers"],
+            Path::new("/h/.codex/config.toml"),
+            "mcp_servers.",
+            true,
+            "codex",
+            &mut out,
+        );
+        assert_eq!(out.len(), 3);
+        assert_eq!(
+            out[0].command_line(),
+            "npx -y @modelcontextprotocol/server-github"
+        );
+        assert_eq!(
+            out[0].env.get("GITHUB_TOKEN").map(String::as_str),
+            Some("${GITHUB_TOKEN}")
+        );
+        assert_eq!(out[1].url.as_deref(), Some("https://mcp.vendor.io/mcp"));
+        assert_eq!(out[2].args, vec!["mcp-server-fetch"]);
+        assert!(toml_subset::parse("bad line without equals").is_err());
+    }
+
+    #[test]
+    fn zed_and_opencode_shapes() {
+        let zed: Value = serde_json::json!({"fs": {"command": {"path": "node", "args": ["server.js"], "env": {"K": "v"}}}});
+        let mut out = Vec::new();
+        servers_from(
+            &zed,
+            Path::new("/h/.config/zed/settings.json"),
+            "context_servers.",
+            true,
+            "zed",
+            &mut out,
+        );
+        assert_eq!(out[0].command_line(), "node server.js");
+        assert_eq!(out[0].env.get("K").map(String::as_str), Some("v"));
+        let oc: Value = serde_json::json!({"fs": {"type": "local", "command": ["bun", "x", "my-mcp"], "environment": {"A": "b"}}, "r": {"type": "remote", "url": "https://x/mcp"}});
+        let mut out = Vec::new();
+        servers_from(
+            &oc,
+            Path::new("/p/opencode.json"),
+            "mcp.",
+            false,
+            "opencode",
+            &mut out,
+        );
+        assert_eq!(out[0].command_line(), "bun x my-mcp");
+        assert_eq!(out[0].transport, Transport::Stdio);
+        assert_eq!(out[1].transport, Transport::Http);
+    }
+
+    #[test]
+    fn comment_stripper_never_panics() {
+        let mut seed: u64 = 0x9E3779B97F4A7C15;
+        for _ in 0..3000 {
+            let mut s = String::new();
+            for _ in 0..(seed % 40) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                let c = match seed % 12 {
+                    0 => '"',
+                    1 => '/',
+                    2 => '*',
+                    3 => '\\',
+                    4 => '\n',
+                    5 => 'é',
+                    6 => '😀',
+                    _ => (b'a' + (seed % 26) as u8) as char,
+                };
+                s.push(c);
+            }
+            let _ = strip_json_comments(&s);
+            let _ = toml_subset::parse(&s);
+            let _ = split_frontmatter(&s);
+        }
     }
 
     #[test]

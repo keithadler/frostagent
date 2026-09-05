@@ -1,5 +1,6 @@
 //! frostagent: deny-by-default capability linter for AI agent setups.
 
+mod caps;
 mod discover;
 mod lock;
 mod model;
@@ -21,7 +22,9 @@ USAGE
   frostagent lock  [dir] [options]      probe and approve the tools as they are now (writes frostagent.lock)
   frostagent init  [dir]                write a starter frostagent.policy from what is found
   frostagent summary [--policy FILE]    read the policy back in plain English
-  frostagent rules                      list every rule with its default severity
+  frostagent rules [--markdown]         list every rule with its default severity
+  frostagent explain <rule>             what a rule means and how to fix or allow it
+  frostagent baseline [dir] [options]   record today's findings so only new ones are reported
 
 OPTIONS
   --user               also read per-user config: ~/.claude.json, ~/.claude, Claude Desktop, Cursor
@@ -32,6 +35,9 @@ OPTIONS
   --only NAME          probe only this server (repeatable)
   --fail-on LEVEL      exit 1 on fail (default) or warn
   --exit-zero          always exit 0
+  --baseline FILE      hide findings recorded in this file (default: frostagent.baseline.json if present)
+  --color MODE         auto (default), always, never; NO_COLOR is honored
+  --no-source          skip reading the source of local servers (and of npx packages in the npm cache)
   --verbose            show allowed findings and every probed tool
 
 Nothing is uploaded. Probing runs the servers exactly as your agent would, with their configured env.
@@ -49,6 +55,11 @@ struct Args {
     fail_on: String,
     exit_zero: bool,
     verbose: bool,
+    baseline: Option<PathBuf>,
+    color: String,
+    no_source: bool,
+    markdown: bool,
+    rest: Vec<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -64,6 +75,11 @@ fn parse_args() -> Result<Args, String> {
         fail_on: "fail".into(),
         exit_zero: false,
         verbose: false,
+        baseline: None,
+        color: "auto".into(),
+        markdown: false,
+        no_source: false,
+        rest: vec![],
     };
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -113,6 +129,16 @@ fn parse_args() -> Result<Args, String> {
             }
             "--exit-zero" => a.exit_zero = true,
             "--verbose" | "-v" => a.verbose = true,
+            "--markdown" => a.markdown = true,
+            "--no-source" => a.no_source = true,
+            "--baseline" => {
+                a.baseline = Some(PathBuf::from(take("--baseline")?));
+                i += 1;
+            }
+            "--color" => {
+                a.color = take("--color")?;
+                i += 1;
+            }
             _ if s.starts_with('-') => return Err(format!("unknown option `{s}`\n\n{USAGE}")),
             _ => positional.push(s.to_string()),
         }
@@ -121,10 +147,14 @@ fn parse_args() -> Result<Args, String> {
     if let Some(first) = positional.first() {
         if matches!(
             first.as_str(),
-            "scan" | "probe" | "lock" | "init" | "summary" | "rules"
+            "scan" | "probe" | "lock" | "init" | "summary" | "rules" | "explain" | "baseline"
         ) {
             a.cmd = positional.remove(0);
         }
+    }
+    if a.cmd == "explain" {
+        a.rest = positional;
+        return Ok(a);
     }
     if let Some(d) = positional.first() {
         a.dir = PathBuf::from(d);
@@ -176,8 +206,30 @@ fn load_policy(args: &Args) -> Result<(policy::Policy, Option<String>), String> 
 fn run(args: &Args) -> Result<ExitCode, String> {
     match args.cmd.as_str() {
         "rules" => {
-            for r in rules::RULES {
-                println!("{:<4}  {:<22} {}", r.severity.label(), r.id, r.about);
+            if args.markdown {
+                print!("{}", rules::rules_markdown());
+            } else {
+                for r in rules::RULES {
+                    println!("{:<4}  {:<24} {}", r.severity.label(), r.id, r.about);
+                }
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        "explain" => {
+            let Some(id) = args.rest.first() else {
+                return Err("explain: which rule? run `frostagent rules` for the list".into());
+            };
+            let Some(r) = rules::rule(id) else {
+                return Err(format!(
+                    "unknown rule `{id}`; run `frostagent rules` for the list"
+                ));
+            };
+            println!("{}  ({} by default)\n", r.id, r.severity.label());
+            println!("What it means\n  {}.\n", r.about);
+            println!("How to fix it\n  {}\n", r.fix);
+            println!("How to allow it, once you have decided it is fine\n  server \"<name>\" may {}          -- or skill / hook / permission / tool\n  everything may {}\n", r.id, r.id);
+            if r.severity != rules::Severity::Fail {
+                println!("How to make it a failure\n  forbid {}\n", r.id);
             }
             return Ok(ExitCode::SUCCESS);
         }
@@ -214,6 +266,19 @@ fn run(args: &Args) -> Result<ExitCode, String> {
     }
     for s in &setup.skills {
         rules::check_skill(s, &mut findings);
+    }
+    // Source-level capabilities for servers whose code is on this machine.
+    let mut capabilities: Vec<(String, caps::Capabilities)> = Vec::new();
+    if !args.no_source {
+        for s in &setup.servers {
+            if let Some(root) = caps::locate(s) {
+                let c = caps::extract(&root);
+                if c.files > 0 {
+                    caps::findings(s, &c, &mut findings);
+                    capabilities.push((s.name.clone(), c));
+                }
+            }
+        }
     }
     for e in &setup.errors {
         findings.push(rules::Finding {
@@ -270,6 +335,7 @@ fn run(args: &Args) -> Result<ExitCode, String> {
                 });
             }
             tools.extend(p.tools.iter().cloned());
+            rules::check_probe_text(&p, &mut findings);
             probes.push(p);
         }
         rules::check_tools(&tools, &mut findings);
@@ -309,14 +375,65 @@ fn run(args: &Args) -> Result<ExitCode, String> {
         }
     }
 
-    let (active, allowed) = pol.apply(findings);
+    let (mut active, mut allowed) = pol.apply(findings);
+    let baseline_path = args
+        .baseline
+        .clone()
+        .unwrap_or_else(|| args.dir.join("frostagent.baseline.json"));
+    if args.cmd == "baseline" {
+        let keys: Vec<String> = active.iter().map(finding_key).collect();
+        let doc = serde_json::json!({"version": 1, "tool": "frostagent", "findings": keys, "note": "Findings recorded here are hidden by later runs. Delete entries as you fix them."});
+        std::fs::write(
+            &baseline_path,
+            serde_json::to_string_pretty(&doc).unwrap() + "\n",
+        )
+        .map_err(|e| e.to_string())?;
+        eprintln!(
+            "recorded {} finding{} in {}",
+            keys.len(),
+            if keys.len() == 1 { "" } else { "s" },
+            model::shorten_home(&baseline_path)
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    if baseline_path.exists() {
+        let text = std::fs::read_to_string(&baseline_path).map_err(|e| e.to_string())?;
+        let doc: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", baseline_path.display()))?;
+        let known: std::collections::HashSet<String> = doc["findings"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|k| k.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let (kept, hidden): (Vec<_>, Vec<_>) = active
+            .into_iter()
+            .partition(|f| !known.contains(&finding_key(f)));
+        active = kept;
+        for mut f in hidden {
+            f.allowed_by = Some(format!("baseline {}", model::shorten_home(&baseline_path)));
+            allowed.push(f);
+        }
+    }
+    let color = match args.color.as_str() {
+        "always" => true,
+        "never" => false,
+        _ => {
+            std::env::var_os("NO_COLOR").is_none()
+                && std::io::IsTerminal::is_terminal(&std::io::stdout())
+        }
+    };
     let rep = report::Report {
+        color,
         policy_name: &pol.name,
         policy_path: pol_path.as_deref(),
         setup: &setup,
         findings: &active,
         allowed: &allowed,
         probes: &probes,
+        capabilities: &capabilities,
         verbose: args.verbose,
     };
     let out = match args.format.as_str() {
@@ -333,6 +450,16 @@ fn run(args: &Args) -> Result<ExitCode, String> {
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// Stable identity of a finding for the baseline: rule, kind, subject and source file.
+fn finding_key(f: &rules::Finding) -> String {
+    let src = f
+        .source
+        .as_ref()
+        .map(|s| model::shorten_home(&s.file))
+        .unwrap_or_default();
+    model::fingerprint(&[f.rule, f.kind, &f.subject, &src])[..24].to_string()
 }
 
 fn init(args: &Args, setup: &model::Setup) -> Result<ExitCode, String> {

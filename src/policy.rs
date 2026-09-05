@@ -418,6 +418,45 @@ mod tests {
     }
 
     #[test]
+    fn parser_never_panics_on_garbage() {
+        let mut seed: u64 = 0x2545F4914F6CDD1D;
+        let words = [
+            "policy",
+            "server",
+            "skill",
+            "may",
+            "trust",
+            "forbid",
+            "require",
+            "lock",
+            "in",
+            "until",
+            "\"",
+            "*",
+            "--",
+            "#",
+            "2026-01-01",
+            "unpinned-package",
+            "\n",
+            "everything",
+            "tool",
+            "hook",
+        ];
+        for _ in 0..3000 {
+            let mut text = String::new();
+            for _ in 0..(seed % 30) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                text.push_str(words[(seed % words.len() as u64) as usize]);
+                text.push(if seed % 5 == 0 { '\n' } else { ' ' });
+            }
+            let _ = Policy::parse(&text);
+            let _ = glob(&text, "server");
+        }
+    }
+
+    #[test]
     fn glob_works() {
         assert!(glob("*", "anything"));
         assert!(glob("mesh*", "Meshy"));

@@ -1,6 +1,6 @@
 //! Start each server the way the agent host would, ask it for its tools, stop it.
 
-use crate::model::{Probe, Server, Tool, Transport};
+use crate::model::{Probe, Prompt, Resource, Server, Tool, Transport};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
@@ -69,6 +69,69 @@ fn tools_from(list: &Value, server: &str) -> Vec<Tool> {
     out
 }
 
+fn prompts_from(list: &Value, server: &str) -> Vec<Prompt> {
+    list.get("prompts")
+        .and_then(|p| p.as_array())
+        .map(|a| {
+            a.iter()
+                .map(|p| Prompt {
+                    server: server.to_string(),
+                    name: p
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    description: p
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    arguments: p.get("arguments").cloned().unwrap_or(Value::Null),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn resources_from(list: &Value, server: &str) -> Vec<Resource> {
+    let mut out = Vec::new();
+    for key in ["resources", "resourceTemplates"] {
+        if let Some(a) = list.get(key).and_then(|r| r.as_array()) {
+            for r in a {
+                out.push(Resource {
+                    server: server.to_string(),
+                    uri: r
+                        .get("uri")
+                        .or_else(|| r.get("uriTemplate"))
+                        .and_then(|u| u.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    name: r
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    description: r
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Which list methods the server says it supports.
+fn advertised(result: &Value) -> (bool, bool) {
+    let caps = &result["capabilities"];
+    (
+        caps.get("prompts").is_some(),
+        caps.get("resources").is_some(),
+    )
+}
+
 fn init_request(id: u64, protocol: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "method": "initialize", "params": {
         "protocolVersion": protocol,
@@ -86,14 +149,17 @@ pub fn probe(s: &Server, timeout: Duration) -> Probe {
         error: None,
         server_info: None,
         protocol_version: None,
+        instructions: None,
         tools: Vec::new(),
+        prompts: Vec::new(),
+        resources: Vec::new(),
         stderr: String::new(),
         millis: 0,
     };
     let r = match s.transport {
         Transport::Stdio => probe_stdio(s, timeout, &mut p),
         Transport::Http => probe_http(s, timeout, &mut p),
-        Transport::Sse => Err("legacy SSE transport is not probed; switch the server to streamable http if it supports it".to_string()),
+        Transport::Sse => probe_sse(s, timeout, &mut p),
         Transport::Unknown => Err("no command and no url".to_string()),
     };
     match r {
@@ -186,34 +252,59 @@ fn probe_stdio(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), Strin
             .and_then(|v| v.as_str())
             .map(String::from);
         p.server_info = result.get("serverInfo").cloned();
+        p.instructions = result
+            .get("instructions")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let (has_prompts, has_resources) = advertised(result);
         send(
             &mut stdin,
             &json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         )?;
-        let mut cursor: Option<String> = None;
-        loop {
-            let id = next_id;
-            next_id += 1;
-            let params = match &cursor {
-                Some(c) => json!({"cursor": c}),
-                None => json!({}),
-            };
-            send(
-                &mut stdin,
-                &json!({"jsonrpc": "2.0", "id": id, "method": "tools/list", "params": params}),
-            )?;
-            let resp = wait_for(&rx, id, deadline)?;
-            if let Some(e) = resp.get("error") {
-                return Err(format!("tools/list failed: {e}"));
+        let mut list = |method: &str, p: &mut Probe| -> Result<(), String> {
+            let mut cursor: Option<String> = None;
+            let mut pages = 0;
+            loop {
+                let id = next_id;
+                next_id += 1;
+                let params = match &cursor {
+                    Some(c) => json!({"cursor": c}),
+                    None => json!({}),
+                };
+                send(
+                    &mut stdin,
+                    &json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}),
+                )?;
+                let resp = wait_for(&rx, id, deadline)?;
+                if let Some(e) = resp.get("error") {
+                    if method == "tools/list" {
+                        return Err(format!("tools/list failed: {e}"));
+                    }
+                    return Ok(()); // optional lists may be refused
+                }
+                match method {
+                    "tools/list" => p.tools.extend(tools_from(&resp["result"], &s.name)),
+                    "prompts/list" => p.prompts.extend(prompts_from(&resp["result"], &s.name)),
+                    _ => p.resources.extend(resources_from(&resp["result"], &s.name)),
+                }
+                cursor = resp["result"]
+                    .get("nextCursor")
+                    .and_then(|c| c.as_str())
+                    .map(String::from);
+                pages += 1;
+                if cursor.is_none() || pages > 50 {
+                    break;
+                }
             }
-            p.tools.extend(tools_from(&resp["result"], &s.name));
-            cursor = resp["result"]
-                .get("nextCursor")
-                .and_then(|c| c.as_str())
-                .map(String::from);
-            if cursor.is_none() || p.tools.len() > 5000 {
-                break;
-            }
+            Ok(())
+        };
+        list("tools/list", p)?;
+        if has_prompts {
+            list("prompts/list", p)?;
+        }
+        if has_resources {
+            list("resources/list", p)?;
+            list("resources/templates/list", p)?;
         }
         Ok(())
     })();
@@ -366,6 +457,11 @@ fn probe_http(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String
         .and_then(|v| v.as_str())
         .map(String::from);
     p.server_info = result.get("serverInfo").cloned();
+    p.instructions = result
+        .get("instructions")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let (has_prompts, has_resources) = advertised(result);
     let proto = p.protocol_version.clone().or(proto_used.map(String::from));
     let _ = post(
         &agent,
@@ -373,33 +469,256 @@ fn probe_http(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String
         &json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         proto.as_deref(),
     );
-    let mut cursor: Option<String> = None;
     let mut id = 2;
-    loop {
-        let params = match &cursor {
-            Some(c) => json!({"cursor": c}),
-            None => json!({}),
-        };
-        let (_, _, text) = post(
-            &agent,
-            &session,
-            &json!({"jsonrpc": "2.0", "id": id, "method": "tools/list", "params": params}),
-            proto.as_deref(),
-        )?;
-        id += 1;
-        let v: Value = serde_json::from_str(text.trim())
-            .map_err(|e| format!("tools/list returned non-JSON: {e}"))?;
-        if let Some(e) = v.get("error") {
-            return Err(format!("tools/list failed: {e}"));
+    let mut list = |method: &str, p: &mut Probe| -> Result<(), String> {
+        let mut cursor: Option<String> = None;
+        let mut pages = 0;
+        loop {
+            let params = match &cursor {
+                Some(c) => json!({"cursor": c}),
+                None => json!({}),
+            };
+            let (_, _, text) = post(
+                &agent,
+                &session,
+                &json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}),
+                proto.as_deref(),
+            )?;
+            id += 1;
+            let v: Value = serde_json::from_str(text.trim())
+                .map_err(|e| format!("{method} returned non-JSON: {e}"))?;
+            if let Some(e) = v.get("error") {
+                if method == "tools/list" {
+                    return Err(format!("tools/list failed: {e}"));
+                }
+                return Ok(());
+            }
+            match method {
+                "tools/list" => p.tools.extend(tools_from(&v["result"], &s.name)),
+                "prompts/list" => p.prompts.extend(prompts_from(&v["result"], &s.name)),
+                _ => p.resources.extend(resources_from(&v["result"], &s.name)),
+            }
+            cursor = v["result"]
+                .get("nextCursor")
+                .and_then(|c| c.as_str())
+                .map(String::from);
+            pages += 1;
+            if cursor.is_none() || pages > 50 {
+                break;
+            }
         }
-        p.tools.extend(tools_from(&v["result"], &s.name));
-        cursor = v["result"]
-            .get("nextCursor")
-            .and_then(|c| c.as_str())
-            .map(String::from);
-        if cursor.is_none() || p.tools.len() > 5000 {
+        Ok(())
+    };
+    list("tools/list", p)?;
+    if has_prompts {
+        list("prompts/list", p)?;
+    }
+    if has_resources {
+        list("resources/list", p)?;
+        list("resources/templates/list", p)?;
+    }
+    Ok(())
+}
+
+/// Legacy HTTP+SSE transport (2024-11-05): GET the SSE stream, receive an
+/// `endpoint` event naming where to POST, POST JSON-RPC there, read responses
+/// off the stream.
+fn probe_sse(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String> {
+    use std::io::Read;
+    let url = s.url.clone().ok_or("no url")?;
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(timeout)
+        .timeout_read(timeout)
+        .build();
+    let mut req = agent.get(&url).set("Accept", "text/event-stream");
+    for (k, v) in &s.headers {
+        req = req.set(k, &expand_env(v));
+    }
+    let resp = match req.call() {
+        Ok(r) => r,
+        Err(ureq::Error::Status(code, _)) => {
+            return Err(match code {
+                401 | 403 => format!(
+                    "HTTP {code}: authentication rejected{}",
+                    if s.headers.is_empty() {
+                        " (no Authorization header configured)"
+                    } else {
+                        ""
+                    }
+                ),
+                _ => format!("HTTP {code} opening the SSE stream"),
+            })
+        }
+        Err(e) => return Err(format!("could not open SSE stream: {e}")),
+    };
+    let reader = resp.into_reader();
+    // Stream events to a channel from a thread; the body never ends on its own.
+    let (tx, rx) = mpsc::channel::<(String, String)>();
+    std::thread::spawn(move || {
+        let mut r = std::io::BufReader::new(reader);
+        let mut event = String::new();
+        let mut data = String::new();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            let mut byte = [0u8; 1];
+            // read_line on a chunked stream
+            let mut got = false;
+            loop {
+                match r.read(&mut byte) {
+                    Ok(0) => break,
+                    Ok(_) => {
+                        got = true;
+                        if byte[0] == b'\n' {
+                            break;
+                        }
+                        line.push(byte[0] as char);
+                    }
+                    Err(_) => break,
+                }
+            }
+            if !got {
+                break;
+            }
+            let l = line.trim_end_matches('\r');
+            if let Some(e) = l.strip_prefix("event:") {
+                event = e.trim().to_string();
+            } else if let Some(d) = l.strip_prefix("data:") {
+                data.push_str(d.trim_start());
+            } else if l.is_empty() {
+                if !data.is_empty()
+                    && tx
+                        .send((std::mem::take(&mut event), std::mem::take(&mut data)))
+                        .is_err()
+                {
+                    break;
+                }
+                event.clear();
+            }
+        }
+    });
+    let deadline = Instant::now() + timeout;
+    let endpoint = loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return Err("timed out waiting for the SSE endpoint event".into());
+        }
+        match rx.recv_timeout(deadline - now) {
+            Ok((ev, d)) if ev == "endpoint" => break d,
+            Ok(_) => continue,
+            Err(_) => return Err("SSE stream closed before sending an endpoint".into()),
+        }
+    };
+    // Endpoint may be relative to the SSE url.
+    let post_url = if endpoint.starts_with("http") {
+        endpoint
+    } else {
+        let base = url.split('?').next().unwrap_or(&url);
+        let origin_end = base
+            .find("://")
+            .map(|i| i + 3)
+            .and_then(|i| base[i..].find('/').map(|j| i + j))
+            .unwrap_or(base.len());
+        if endpoint.starts_with('/') {
+            format!("{}{}", &base[..origin_end], endpoint)
+        } else {
+            format!("{}/{}", base.trim_end_matches('/'), endpoint)
+        }
+    };
+    let post = |body: &Value| -> Result<(), String> {
+        let mut req = agent
+            .post(&post_url)
+            .set("Content-Type", "application/json");
+        for (k, v) in &s.headers {
+            req = req.set(k, &expand_env(v));
+        }
+        match req.send_string(&body.to_string()) {
+            Ok(_) => Ok(()),
+            Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code} posting to {post_url}")),
+            Err(e) => Err(format!("post failed: {e}")),
+        }
+    };
+    let wait = |rx: &mpsc::Receiver<(String, String)>, id: u64| -> Result<Value, String> {
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                return Err("timed out waiting for the server".into());
+            }
+            match rx.recv_timeout(deadline - now) {
+                Ok((_, d)) => {
+                    if let Ok(v) = serde_json::from_str::<Value>(&d) {
+                        if v.get("id").and_then(|i| i.as_u64()) == Some(id) {
+                            return Ok(v);
+                        }
+                    }
+                }
+                Err(_) => return Err("SSE stream closed".into()),
+            }
+        }
+    };
+    let mut id = 1u64;
+    let mut init = None;
+    for proto in PROTOCOLS {
+        post(&init_request(id, proto))?;
+        let v = wait(&rx, id)?;
+        id += 1;
+        if v.get("error").is_none() {
+            init = Some(v);
             break;
         }
+    }
+    let init = init.ok_or("server rejected every protocol version we know")?;
+    let result = &init["result"];
+    p.protocol_version = result
+        .get("protocolVersion")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    p.server_info = result.get("serverInfo").cloned();
+    p.instructions = result
+        .get("instructions")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let (has_prompts, has_resources) = advertised(result);
+    post(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))?;
+    let mut list = |method: &str, p: &mut Probe| -> Result<(), String> {
+        let mut cursor: Option<String> = None;
+        let mut pages = 0;
+        loop {
+            let params = match &cursor {
+                Some(c) => json!({"cursor": c}),
+                None => json!({}),
+            };
+            post(&json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params}))?;
+            let v = wait(&rx, id)?;
+            id += 1;
+            if let Some(e) = v.get("error") {
+                if method == "tools/list" {
+                    return Err(format!("tools/list failed: {e}"));
+                }
+                return Ok(());
+            }
+            match method {
+                "tools/list" => p.tools.extend(tools_from(&v["result"], &s.name)),
+                "prompts/list" => p.prompts.extend(prompts_from(&v["result"], &s.name)),
+                _ => p.resources.extend(resources_from(&v["result"], &s.name)),
+            }
+            cursor = v["result"]
+                .get("nextCursor")
+                .and_then(|c| c.as_str())
+                .map(String::from);
+            pages += 1;
+            if cursor.is_none() || pages > 50 {
+                break;
+            }
+        }
+        Ok(())
+    };
+    list("tools/list", p)?;
+    if has_prompts {
+        list("prompts/list", p)?;
+    }
+    if has_resources {
+        list("resources/list", p)?;
     }
     Ok(())
 }
@@ -432,6 +751,37 @@ mod tests {
             expand_env("a ${FROST_T} $FROST_T ${NOPE_X:-d} $"),
             "a v v d $"
         );
+    }
+
+    #[test]
+    fn helpers_never_panic_on_garbage() {
+        let mut seed: u64 = 0x9E3779B97F4A7C15;
+        for _ in 0..3000 {
+            let mut t = String::new();
+            for _ in 0..(seed % 24) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                t.push(match seed % 10 {
+                    0 => '$',
+                    1 => '{',
+                    2 => '}',
+                    3 => ':',
+                    4 => '-',
+                    5 => '\n',
+                    6 => 'é',
+                    _ => 'a',
+                });
+            }
+            let _ = expand_env(&t);
+            let _ = sse_data(&format!("data:{t}\n\n{t}"));
+            let _ = tools_from(&serde_json::json!({"tools": [{"name": t}, 5, null]}), "s");
+            let _ = prompts_from(&serde_json::json!({"prompts": [{"name": t}, 5]}), "s");
+            let _ = resources_from(
+                &serde_json::json!({"resources": [{"uri": t}], "resourceTemplates": [7]}),
+                "s",
+            );
+        }
     }
 
     #[test]

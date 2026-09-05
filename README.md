@@ -2,15 +2,20 @@
 
 What may your agent's tools do? A one-screen policy says; the check fails on anything else.
 
-frostagent is a deny-by-default capability linter for AI agent setups. It reads the
-MCP servers, hooks, permission rules and skills that Claude Code, Claude Desktop,
-Cursor, VS Code and Claude Code plugins have been given, starts each server the way
-the host would and inspects the tools it offers, and reports everything that grants
-power without saying so. A lockfile pins each tool's description and schema, so a
-server that changes its tools under you fails the build. Part of the
-[frost](https://github.com/keithadler/frost) family with
+frostagent is a deny-by-default capability linter for AI agent setups. It reads
+the MCP servers, hooks, permission rules and skills that Claude Code, Claude
+Desktop, Cursor, VS Code, Codex, Zed, Windsurf, Gemini CLI, OpenCode, Cline and
+plugins have been given. It starts each server the way the host would, over
+stdio, streamable HTTP or legacy SSE, and inspects the tools, prompts, resources
+and startup instructions it offers. It reads the source of servers that live on
+the machine, including npx packages already in the npm cache, and says what the
+code can do. A lockfile pins every tool's description and schema so a server
+that changes under you fails the build. Nothing is uploaded anywhere.
+
+Part of the [frost](https://github.com/keithadler/frost) family with
 [frostjs](https://github.com/keithadler/frostjs), [frostpy](https://github.com/keithadler/frostpy)
-and [frostphp](https://github.com/keithadler/frostphp).
+and [frostphp](https://github.com/keithadler/frostphp): the same one-screen
+policy dialect, the same rule that everything is off until a line turns it on.
 
 ```
 $ frostagent probe --user
@@ -29,39 +34,37 @@ WARN  plaintext-secret    server "meshy"   ~/.claude.json (projects[~/Downloads/
 WARN  unpinned-package    server "meshy"   ~/.claude.json (projects[~/Downloads/app].mcpServers.meshy)
       `npx -y @meshy-ai/meshy-mcp-server` fetches `@meshy-ai/meshy-mcp-server` at whatever version the
       registry serves today. Pin it: `@meshy-ai/meshy-mcp-server@<version>`.
-WARN  annotation-mismatch tool "meshy/meshy_send_to_slicer"
-      annotated readOnlyHint=true but its name starts with `send`, a verb that changes something.
 
-1 fail, 4 warn, 12 info (hidden; --verbose shows them), 0 allowed by policy
+1 fail, 3 warn, 12 info (hidden; --verbose shows them), 0 allowed
 ```
 
-That is a real run against a real machine, trimmed. Every line is something the
-person had not decided on purpose.
+A real run against a real machine, trimmed. Every line is something the person
+had not decided on purpose.
 
 ## What it catches
 
-**In configuration**, without running anything:
+**In configuration**, without running anything
 
 - Servers fetched unpinned: `npx -y pkg`, `uvx pkg`, `docker run image` with no version, tag or digest.
-- Tokens written into config files, in `env`, `headers` or on the command line, rather than referenced as `${VAR}`. A project file that may be committed is a failure; a per-user file is a warning.
-- Remote servers over plain `http://`.
-- Commands that download and run a script in one step, containers with host access, binaries living in `/tmp` or `Downloads`, flags that disable safety checks.
-- Hooks that reach the network with tool input on stdin, evaluate what they receive, delete things, or use sudo.
+- Tokens written into config files, in `env`, `headers` or on the command line, instead of `${VAR}`. In a file that may be committed that is a failure; in a per-user file, a warning.
+- Remote servers over plain `http://`. Commands that download and run a script in one step. Containers with host access. Binaries in `/tmp` or `Downloads`. Flags that disable safety checks.
+- Hooks that pipe tool input to the network, `eval` what they receive, delete things or use sudo.
 - Permission rules that pre-approve a whole tool (`Bash(*)`, `mcp__*`), a destructive command, or a bypass mode.
-- Skills whose commands download-and-run, read `~/.ssh` or `~/.aws`, delete outside the project, ask the user for credentials, or contain text aimed at steering the model against the user.
-- Invisible characters anywhere: zero-width, bidirectional overrides, tag characters.
+- Skills whose commands download-and-run, read `~/.ssh` or `~/.aws`, delete outside the project, ask for credentials, or carry text aimed at steering the model against the user.
+- Invisible characters anywhere: zero-width, bidirectional overrides, Unicode tags.
 
-**In live tools**, by starting each server and calling `tools/list`:
+**In the server's source**, when it is on the machine
 
-- Tool poisoning: descriptions or parameter descriptions that instruct the model ("before calling any other tool", "do not tell the user", "ignore previous instructions").
-- URLs in descriptions, which is where a poisoned tool sends what it steals.
-- Descriptions many times longer than their peers.
-- The same tool name on two servers, or names one edit apart.
-- Tools annotated read-only whose names start with a verb that writes.
-- Tools that take a command, script or query as free text.
-- Drift: any tool whose description or schema changed since `frostagent lock` approved it.
+- Process spawning, runtime eval, credential-store reads, network hosts, environment variables read, file writes. A `read_file` tool whose code spawns processes is not the tool its description promises.
 
-Run `frostagent rules` for the full list with default severities.
+**In live servers**, by starting each one and listing what it offers
+
+- Tool poisoning: descriptions, parameter descriptions, prompt templates, resources or initialize instructions that tell the model to call other tools first, hide something, or send data somewhere.
+- URLs in descriptions, descriptions many times longer than their peers, the same tool name on two servers, names one edit apart, read-only annotations on tools whose names write, tools that take a command or query as free text.
+- Drift: any tool, prompt or instruction text that changed since `frostagent lock` approved it.
+
+Run `frostagent rules` for all 51 rules, `frostagent explain <rule>` for what one
+means and how to fix or allow it, or read [docs/rules.md](docs/rules.md).
 
 ## Install
 
@@ -69,25 +72,29 @@ Run `frostagent rules` for the full list with default severities.
 cargo install frostagent
 ```
 
-or download a binary from the releases page. One static executable, no runtime.
+or a binary from the releases page. One static executable, about 3.5 MB, no runtime.
 
 ## Use
 
 ```
 frostagent                      lint the current project
-frostagent --user               also read ~/.claude.json, ~/.claude, Claude Desktop, Cursor
+frostagent --user               also read ~/.claude.json, ~/.claude, Claude Desktop, Cursor, Codex, Zed ...
 frostagent probe --user         also start every server and inspect its tools
 frostagent lock                 approve the tools as they are now (writes frostagent.lock)
 frostagent init                 write a starter frostagent.policy
 frostagent summary              read the policy back in plain English
+frostagent explain <rule>       what a rule means, how to fix it, how to allow it
+frostagent baseline             record today's findings; later runs report only new ones
 ```
 
-Exit code 1 on any failure (or on warnings with `--fail-on warn`), 0 otherwise.
-`--format json|sarif|github` for machines and for GitHub code scanning.
+Exit code 1 on any failure, or on warnings with `--fail-on warn`. `--format
+json|sarif|github` for machines and for GitHub code scanning. Color when
+stdout is a terminal, off with `NO_COLOR` or `--color never`.
 
-Probing runs the servers exactly as your agent would, with their configured env,
-and kills them after `tools/list`. It is opt-in because it executes code. Nothing
-is uploaded anywhere.
+Probing runs the servers exactly as your agent would, with their configured env
+expanded from your shell, and kills them after listing. It is a separate command
+because it executes code. Servers that need an interactive OAuth sign-in are
+reported as not inspected.
 
 ## The policy
 
@@ -108,10 +115,12 @@ Subjects are `server`, `skill`, `hook`, `permission`, `tool` or `everything`.
 Names may use `*`. `in "<file>"` limits a line to one config file. `until` makes
 an exception expire, and an expired line is itself a warning. `trust` turns a
 subject off entirely. `forbid` turns a rule's warnings into failures. Unknown
-rule names are errors, so a typo cannot silently allow anything.
+rule names are errors, so a typo cannot silently allow anything. Waived findings
+are kept in the JSON output and shown with `--verbose`; nothing disappears.
 
-`frostagent summary` prints the policy as sentences so a reviewer can read it
-without knowing the syntax.
+`frostagent summary` prints the policy as sentences. `frostagent baseline`
+records the current findings for a repo you are adopting the tool in, so the
+build stays green until something new appears. See [docs/policy.md](docs/policy.md).
 
 ## The lockfile
 
@@ -119,13 +128,25 @@ without knowing the syntax.
 frostagent lock --user
 ```
 
-probes every server and writes `frostagent.lock`: for each server, the SHA-256 of
-every tool's name, description, input schema and annotations. From then on
-`frostagent probe` reports `tool-drift` as a failure when any of those change,
-`tool-added` when a server grows a tool, and `tool-removed` when one disappears.
-Commit the lockfile. Review the diff when it changes, the way you would a
-dependency lockfile, because a tool description is the part of a dependency that
-your model reads and obeys.
+probes every server and writes `frostagent.lock`: the SHA-256 of every tool's
+name, description, input schema and annotations, of every prompt, and of the
+initialize instructions. From then on `frostagent probe` reports `tool-drift`
+as a failure when any of them change, `tool-added` when a server grows a tool,
+`tool-removed` when one disappears. Commit it and review its diff the way you
+review a dependency lockfile. A tool description is the part of a dependency
+that your model reads and obeys.
+
+## Measured
+
+Numbers from the corpus in [docs/threats.md](docs/threats.md), September 2026:
+
+| | |
+|---|---|
+| Reference and popular servers probed (filesystem, memory, everything, sequential-thinking, fetch, git, time, github, playwright, context7, deepwiki) | 11 servers, 108 tools, 0 poisoning or oversize false positives |
+| Invariant Labs tool-poisoning demonstration servers | 3 of 3 caught; both `add` tools flagged as shadowing; the `.ssh` read caught from source before running |
+| Real skills from Anthropic's skills repo, superpowers and Claude Code's plugins | 44 skills, 0 directive or hidden-Unicode false positives |
+| Hooks from Claude Code's example plugins | 13, 0 findings |
+| Tests | 22 unit, 9 end-to-end including fake stdio and SSE servers and a tampered lockfile |
 
 ## In CI
 
@@ -135,33 +156,26 @@ your model reads and obeys.
     args: probe --format github
 ```
 
-or with the SARIF upload for code scanning:
+With SARIF upload for code scanning, and as a pre-commit hook: see
+[docs/ci.md](docs/ci.md).
 
-```yaml
-- run: frostagent --format sarif > frostagent.sarif
-- uses: github/codeql-action/upload-sarif@v3
-  with:
-    sarif_file: frostagent.sarif
-```
+## Compared with mcp-scan
 
-And as a pre-commit hook:
-
-```yaml
-repos:
-  - repo: https://github.com/keithadler/frostagent
-    rev: v0.1.0
-    hooks:
-      - id: frostagent
-```
+Invariant's mcp-scan is the other tool in this space and it is good. The
+differences that matter: frostagent runs entirely on your machine and never
+sends tool descriptions to a service; it covers hooks, permission rules and
+skills as well as MCP servers, since those are the same attack surface; it reads
+server source; its policy is a committed file in a dialect a reviewer can read
+without knowing the tool; and its lockfile lives in the repo. mcp-scan has a
+runtime proxy, which frostagent does not have yet.
 
 ## What it does not do
 
-It does not read the server's source code. frostjs and frostpy do that for
-JavaScript and Python; wiring their taint analysis to tool arguments is the next
-step. It does not sit between the agent and the servers at runtime, so a poisoned
-result arriving through a legitimate tool is out of scope for a linter. It does
-not perform OAuth sign-ins, so remote servers that require one are reported as
-not inspected.
+It does not trace whether a tool argument reaches an exec call inside the
+server; frostjs and frostpy do that for JavaScript and Python, and wiring them
+in is the next step. It does not sit between the agent and the servers at
+runtime, so a poisoned result arriving through a legitimate tool is out of
+scope. It does not perform OAuth sign-ins.
 
 ## License
 

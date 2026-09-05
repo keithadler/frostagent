@@ -42,55 +42,97 @@ pub struct RuleInfo {
     pub id: &'static str,
     pub severity: Severity,
     pub about: &'static str,
+    pub fix: &'static str,
 }
 
-/// Every rule the tool knows. Policy files may only name these.
-pub const RULES: &[RuleInfo] = &[
-    RuleInfo { id: "unpinned-package", severity: Severity::Warn, about: "a server is launched from a package registry without a pinned version, so the next run may execute different code" },
-    RuleInfo { id: "unpinned-image", severity: Severity::Warn, about: "a container image without a digest or fixed tag" },
-    RuleInfo { id: "plain-http", severity: Severity::Fail, about: "a remote server is reached over plain http, so tool results and any token can be read or altered in transit" },
-    RuleInfo { id: "plaintext-secret", severity: Severity::Fail, about: "a token or key is written literally into a config file instead of referenced from the environment" },
-    RuleInfo { id: "secret-in-args", severity: Severity::Fail, about: "a token is passed on the command line, where every process on the machine can read it" },
-    RuleInfo { id: "remote-script-exec", severity: Severity::Fail, about: "a command downloads a script and runs it in one step" },
-    RuleInfo { id: "privileged-container", severity: Severity::Warn, about: "a container runs with host-level access" },
-    RuleInfo { id: "untrusted-location", severity: Severity::Warn, about: "a server binary lives in a temporary or download folder" },
-    RuleInfo { id: "dangerous-flag", severity: Severity::Warn, about: "a command disables its own safety checks" },
-    RuleInfo { id: "hook-network", severity: Severity::Warn, about: "an automatic hook talks to the network, so tool input or output may leave the machine" },
-    RuleInfo { id: "hook-destructive", severity: Severity::Fail, about: "an automatic hook can delete or overwrite data" },
-    RuleInfo { id: "hook-sudo", severity: Severity::Fail, about: "an automatic hook escalates privileges" },
-    RuleInfo { id: "hook-eval", severity: Severity::Warn, about: "an automatic hook evaluates text it received, which the model or a tool result controls" },
-    RuleInfo { id: "hook-external-script", severity: Severity::Info, about: "an automatic hook runs a script that lives outside the project" },
-    RuleInfo { id: "broad-permission", severity: Severity::Fail, about: "a permission rule allows a whole tool without limits" },
-    RuleInfo { id: "dangerous-permission", severity: Severity::Fail, about: "a permission rule pre-approves a destructive or privileged command" },
-    RuleInfo { id: "permissive-mode", severity: Severity::Warn, about: "the permission mode skips confirmation" },
-    RuleInfo { id: "network-permission", severity: Severity::Info, about: "a permission rule pre-approves network access" },
-    RuleInfo { id: "skill-directive", severity: Severity::Warn, about: "a skill contains text aimed at steering the model against the user" },
-    RuleInfo { id: "hidden-unicode", severity: Severity::Fail, about: "invisible or direction-changing characters that can hide instructions from a reader" },
-    RuleInfo { id: "skill-network", severity: Severity::Warn, about: "a skill's commands reach the network" },
-    RuleInfo { id: "skill-links", severity: Severity::Info, about: "hosts a skill links to in prose" },
-    RuleInfo { id: "skill-secret-access", severity: Severity::Warn, about: "a skill reads credential files or asks for secrets" },
-    RuleInfo { id: "skill-destructive", severity: Severity::Fail, about: "a skill's commands can delete data or escalate privileges" },
-    RuleInfo { id: "broad-skill-tools", severity: Severity::Warn, about: "a skill is allowed an unrestricted tool" },
-    RuleInfo { id: "skill-exec", severity: Severity::Info, about: "a skill ships scripts or is allowed to run commands" },
-    RuleInfo { id: "tool-poisoning", severity: Severity::Fail, about: "a tool description contains instructions aimed at the model rather than a description of the tool" },
-    RuleInfo { id: "tool-url", severity: Severity::Warn, about: "a tool description names a URL, which is where data goes when a poisoned tool exfiltrates" },
-    RuleInfo { id: "oversized-description", severity: Severity::Warn, about: "a tool description is far longer than its peers, a common place to bury instructions" },
-    RuleInfo { id: "tool-shadowing", severity: Severity::Warn, about: "two servers expose the same tool name, so the model may call the wrong one" },
-    RuleInfo { id: "tool-lookalike", severity: Severity::Warn, about: "a tool name is one edit away from another server's tool" },
-    RuleInfo { id: "annotation-mismatch", severity: Severity::Warn, about: "a tool claims to be read-only while its name says it writes" },
-    RuleInfo { id: "exec-surface", severity: Severity::Info, about: "a tool takes a command, script or query as free text" },
-    RuleInfo { id: "destructive-unmarked", severity: Severity::Info, about: "a tool that deletes or removes is not annotated as destructive" },
-    RuleInfo { id: "tool-drift", severity: Severity::Fail, about: "a tool's description or schema changed since it was locked" },
-    RuleInfo { id: "tool-added", severity: Severity::Warn, about: "a server exposes a tool that is not in the lockfile" },
-    RuleInfo { id: "tool-removed", severity: Severity::Info, about: "a locked tool is no longer exposed" },
-    RuleInfo { id: "server-unlocked", severity: Severity::Info, about: "a server has no entry in the lockfile yet" },
-    RuleInfo { id: "probe-failed", severity: Severity::Warn, about: "a server could not be started or did not answer" },
-    RuleInfo { id: "config-error", severity: Severity::Warn, about: "a config file exists but could not be parsed" },
-    RuleInfo { id: "policy-expired", severity: Severity::Warn, about: "a policy exception has passed its date" },
-];
+macro_rules! rules {
+    ($( $id:literal, $sev:ident, $about:literal, $fix:literal; )*) => {
+        pub const RULES: &[RuleInfo] = &[ $( RuleInfo { id: $id, severity: Severity::$sev, about: $about, fix: $fix }, )* ];
+    };
+}
+
+// Every rule the tool knows. Policy files may only name these.
+rules! {
+    "unpinned-package", Warn, "a server is launched from a package registry without a pinned version, so the next run may execute different code", "Add the version: `npx -y pkg@1.2.3`, `uvx pkg==1.2.3`. Then `frostagent lock` so the tools it exposes are pinned too.";
+    "unpinned-image", Warn, "a container image without a digest or fixed tag", "Use `image:1.2.3` or better `image@sha256:...`.";
+    "plain-http", Fail, "a remote server is reached over plain http, so tool results and any token can be read or altered in transit", "Change the url to https. If the server is on this machine, use localhost, which is exempt.";
+    "plaintext-secret", Fail, "a token or key is written literally into a config file instead of referenced from the environment", "Replace the value with `${NAME}` and export NAME in your shell profile or secret manager. Rotate the token if the file was ever committed or synced.";
+    "secret-in-args", Fail, "a token is passed on the command line, where every process on the machine can read it", "Move it to `env` as `${NAME}`; most servers read a token from the environment.";
+    "remote-script-exec", Fail, "a command downloads a script and runs it in one step", "Download the script, read it, commit it, and run the committed copy.";
+    "privileged-container", Warn, "a container runs with host-level access", "Drop `--privileged`, `--pid=host`, `--net=host`, and mounts of `/` or the Docker socket. Mount only the directory the server needs.";
+    "untrusted-location", Warn, "a server binary lives in a temporary or download folder", "Move it under a project or `~/.local/bin`, somewhere a download cannot silently replace it.";
+    "dangerous-flag", Warn, "a command disables its own safety checks", "Remove the flag, or record why it is needed with a policy line.";
+    "hook-network", Warn, "an automatic hook talks to the network, so tool input or output may leave the machine", "If the hook must send data, send only the fields it needs to a host you control, and name that host in the policy.";
+    "hook-destructive", Fail, "an automatic hook can delete or overwrite data", "Scope the target to a build or cache directory inside the project, and never to a variable that can be empty.";
+    "hook-sudo", Fail, "an automatic hook escalates privileges", "Hooks run on every matching event with no prompt; they must not need root.";
+    "hook-eval", Warn, "an automatic hook evaluates text it received, which the model or a tool result controls", "Parse the JSON on stdin with jq and pass fields as arguments; never `eval` or `sh -c` with them.";
+    "hook-external-script", Info, "an automatic hook runs a script that lives outside the project", "Move the script into `.claude/hooks/` so it is reviewed with the repo, or `trust hook` it in the policy.";
+    "broad-permission", Fail, "a permission rule allows a whole tool without limits", "Scope it: `Bash(npm test:*)`, `Bash(git status:*)`, `mcp__github__get_issue`. Add one line per thing you actually pre-approve.";
+    "dangerous-permission", Fail, "a permission rule pre-approves a destructive or privileged command", "Delete the rule and answer the prompt when the command is needed.";
+    "permissive-mode", Warn, "the permission mode skips confirmation", "Use the default mode, or `acceptEdits` if only file edits should be automatic.";
+    "network-permission", Info, "a permission rule pre-approves network access", "Fine if intended. Name the hosts in the policy so a new one is noticed.";
+    "skill-directive", Warn, "a skill contains text aimed at steering the model against the user", "Read the quoted text in context. A skill should instruct the model how to do a job, never to hide something from the person.";
+    "hidden-unicode", Fail, "invisible or direction-changing characters that can hide instructions from a reader", "Open the file in an editor that shows invisible characters and remove them. If you did not write them, treat the source as hostile.";
+    "skill-network", Warn, "a skill's commands reach the network", "Confirm each host is one the skill needs, then `skill \"name\" may skill-network` in the policy.";
+    "skill-links", Info, "hosts a skill links to in prose", "Nothing to fix; this is the list a reviewer should glance at.";
+    "skill-secret-access", Warn, "a skill reads credential files or asks for secrets", "A skill should use a tool that already has access, not read `~/.ssh` or `~/.aws` itself, and should never ask the user to paste a key into the chat.";
+    "skill-destructive", Fail, "a skill's commands can delete data or escalate privileges", "Restrict deletions to paths inside the project and never to a bare variable.";
+    "broad-skill-tools", Warn, "a skill is allowed an unrestricted tool", "List the specific tools: `allowed-tools: Bash(npm test:*), Read`.";
+    "skill-exec", Info, "a skill ships scripts or is allowed to run commands", "Read the scripts once; they run with your permissions.";
+    "tool-poisoning", Fail, "a tool description contains instructions aimed at the model rather than a description of the tool", "Remove the server. A description that tells the model to call other tools, hide things, or send data somewhere is an attack, not a bug.";
+    "tool-url", Warn, "a tool description names a URL, which is where data goes when a poisoned tool exfiltrates", "Check that the host is the server's own API. If the description also talks about sending data, treat it as tool-poisoning.";
+    "oversized-description", Warn, "a tool description is far longer than its peers, a common place to bury instructions", "Read the whole description. Long is fine; long with instructions to the model is not.";
+    "tool-shadowing", Warn, "two servers expose the same tool name, so the model may call the wrong one", "Remove one server, or rename with the host's server prefix, and pre-approve tools by full name.";
+    "tool-lookalike", Warn, "a tool name is one edit away from another server's tool", "Check that the lookalike is not impersonating a trusted tool; remove the server if it is.";
+    "annotation-mismatch", Warn, "a tool claims to be read-only while its name says it writes", "Report it to the server author. Until fixed, do not pre-approve the tool on the strength of its hint.";
+    "exec-surface", Info, "a tool takes a command, script or query as free text", "Expected for shells and databases. Make sure the host asks before running these tools, and `forbid exec-surface` in repos that should have none.";
+    "destructive-unmarked", Info, "a tool that deletes or removes is not annotated as destructive", "Report to the server author; hosts use the hint to decide whether to confirm.";
+    "instructions-poisoning", Fail, "the server's initialize instructions, which the host hands to the model, contain steering text", "Remove the server. Instructions should describe how to use the tools, not override the user.";
+    "server-instructions", Info, "the server sends instructions to the model at startup; read them", "Read them once; `frostagent lock` records them and reports any change.";
+    "prompt-poisoning", Fail, "a prompt template's description or arguments contain steering text or hidden characters", "Remove the server, or the prompt if you control the server.";
+    "resource-poisoning", Warn, "a resource description contains steering text or hidden characters", "Read the resource before letting the model use it; remove the server if it is hostile.";
+    "tool-drift", Fail, "a tool's description or schema changed since it was locked", "Diff the tool against the lockfile (`frostagent probe --verbose`). If the change is legitimate, `frostagent lock` to approve it.";
+    "tool-added", Warn, "a server exposes a tool that is not in the lockfile", "Read the new tool, then `frostagent lock`.";
+    "tool-removed", Info, "a locked tool is no longer exposed", "`frostagent lock` to update the record.";
+    "server-unlocked", Info, "a server has no entry in the lockfile yet", "`frostagent lock` after reading its tools once. Add `require lock` to the policy to make this a failure.";
+    "probe-failed", Warn, "a server could not be started or did not answer", "Run the command by hand. A server that cannot start in frostagent cannot start in the agent either.";
+    "config-error", Warn, "a config file exists but could not be parsed", "Fix the JSON or TOML; the agent host is probably ignoring the file too.";
+    "policy-expired", Warn, "a policy exception has passed its date", "Fix the underlying finding and delete the line, or extend the date with a reason.";
+    "server-exec", Warn, "a local server's source spawns processes", "Expected for shell and git servers. Confirm and `server \"name\" may server-exec`.";
+    "server-eval", Warn, "a local server's source evaluates code at runtime", "Look at what feeds the eval. If tool arguments can reach it, the model can run arbitrary code.";
+    "server-credential-access", Fail, "a local server's source reads credential stores", "A server should receive one token through env, not read `~/.ssh`, `~/.aws` or the keychain.";
+    "server-network", Info, "hosts a local server's source connects to", "Confirm the hosts are the service the server fronts; name them in the policy.";
+    "server-env", Info, "environment variables a local server's source reads", "Pass only what it needs. A server that reads the whole environment sees every token you have.";
+    "server-fs-write", Info, "a local server's source writes files", "Expected for filesystem servers. Check the paths are confined to the configured roots.";
+}
 
 pub fn rule(id: &str) -> Option<&'static RuleInfo> {
     RULES.iter().find(|r| r.id == id)
+}
+
+/// The rules reference as Markdown, for docs/rules.md.
+pub fn rules_markdown() -> String {
+    let mut out = String::from("# Rules\n\nEvery rule frostagent knows, with its default severity. A policy line `<subject> may <rule>` waives one; `forbid <rule>` raises one to a failure. Generated by `frostagent rules --markdown`.\n\n");
+    for sev in [Severity::Fail, Severity::Warn, Severity::Info] {
+        out.push_str(&format!("## {} by default\n\n", sev.label()));
+        for r in RULES.iter().filter(|r| r.severity == sev) {
+            out.push_str(&format!(
+                "### `{}`\n\n{}.\n\n**Fix:** {}\n\n",
+                r.id,
+                capitalize(r.about),
+                r.fix
+            ));
+        }
+    }
+    out
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
 }
 
 fn f(
@@ -179,7 +221,7 @@ fn shannon(s: &str) -> f64 {
 
 // ------------------------------------------------------------------ shared text rules
 
-const DIRECTIVE: &str = r"(?i)(ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|guidance)|do\s+not\s+(tell|inform|mention|reveal|show|warn|notify|disclose)\s+(to\s+)?the\s+user|without\s+(asking|telling|informing|notifying|alerting)\s+(the\s+)?user|never\s+(mention|reveal|tell|disclose)|keep\s+(this|it)\s+(secret|hidden|confidential)|(pretend|act\s+as\s+if)\s+you|disable\s+(safety|guardrails|permissions|confirmations?)|bypass\s+(the\s+)?(permission|safety|approval|confirmation)|(reveal|leak|ignore|override|print|show|dump)\s+(the\s+|your\s+)?system\s+prompt|<\s*important\s*>|before\s+(calling|using|invoking)\s+any\s+other\s+tool|always\s+(call|use|invoke)\s+this\s+(tool\s+)?first|you\s+must\s+(always\s+)?(call|use|invoke|run)\s+this|hide\s+(this|the\s+following)\s+from|do\s+not\s+(show|display)\s+(this|the)\s+(output|result)|exfiltrat|send\s+(the\s+)?(contents?|file|data|ssh|keys?|credentials?|\.env|environment)\s+to\s+https?://)";
+const DIRECTIVE: &str = r"(?i)(ignore\s+(all\s+|any\s+)?(previous|prior|above|earlier)\s+(instructions|rules|guidance)|do\s+not\s+(tell|inform|mention|reveal|show|warn|notify|disclose)\s+(to\s+)?the\s+user|without\s+(asking|telling|informing|notifying|alerting)\s+(the\s+)?user|never\s+(mention|reveal|tell|disclose)\s+(this|these|that|it|the\s+(tool|server|instructions?|prompt|file|upload|step|change)|to\s+the\s+user|anything\s+about\s+this)|keep\s+(this|it)\s+(secret|hidden|confidential)|(pretend|act\s+as\s+if)\s+you|disable\s+(safety|guardrails|permissions|confirmations?)|bypass\s+(the\s+)?(permission|safety|approval|confirmation)|(reveal|leak|ignore|override|print|show|dump)\s+(the\s+|your\s+)?system\s+prompt|<\s*important\s*>|before\s+(calling|using|invoking)\s+any\s+other\s+tool|always\s+(call|use|invoke)\s+this\s+(tool\s+)?first|hide\s+(this|the\s+following)\s+from|do\s+not\s+(show|display)\s+(this|the)\s+(output|result)|send\s+(the\s+)?(contents?|file|data|ssh|keys?|credentials?|\.env|environment|messages?|conversation)\s+(of\s+[^\s]+\s+)?to\s+(https?://|[+0-9]|[a-z0-9.\-]+@)|(this\s+is\s+)?required\s+for\s+the\s+tool\s+to\s+work|the\s+user\s+(does\s+not|doesn'?t|won'?t|will\s+not)\s+(need\s+to\s+)?(see|know|notice))";
 
 pub fn directive_hits(text: &str) -> Vec<String> {
     re(DIRECTIVE)
@@ -354,7 +396,7 @@ pub fn check_server(s: &Server, out: &mut Vec<Finding>) {
                 }
                 if let Some(p) = pkg {
                     if !package_pinned(p) {
-                        out.push(f("unpinned-package", "server", subj, format!("`{cmdline}` fetches `{p}` at whatever version the registry serves today. Pin it: `{p}@<version>`."), src));
+                        out.push(f("unpinned-package", "server", subj, format!("`{cmdline}` fetches `{p}` at whatever version the registry serves today. Pin it: `{}@<version>`.", p.trim_end_matches("@latest").trim_end_matches("@next")), src));
                     }
                 }
             }
@@ -821,6 +863,7 @@ fn placeholder_host(h: &str) -> bool {
         || bare.ends_with("schemas.org")
         || bare.ends_with("schema.org")
         || bare.contains("...")
+        || bare.starts_with("schemas.") || bare.ends_with("openxmlformats.org") || bare.ends_with("openoffice.org") || bare.ends_with("purl.org") || bare.ends_with("xmlns.com") || bare.ends_with("w3.org") || bare.ends_with("json-schema.org") || bare.ends_with("ns.adobe.com")
         || re(r"\.(jpe?g|png|gif|webp|svg|bmp|tiff?|glb|gltf|obj|fbx|stl|pdf|json|xml|ya?ml|txt|md|html?|js|ts|css|zip|tar|gz|mp[34]|wav|csv|tsv|exe|dmg|pkg|bin|wasm|py|rs|sh)$").is_match(bare)
 }
 
@@ -952,13 +995,15 @@ pub fn check_skill(s: &Skill, out: &mut Vec<Finding>) {
         fd.severity = sev;
         out.push(fd);
     } else if re(r"(?i)\bsudo\b").is_match(&commands) {
-        out.push(f(
+        let mut fd = f(
             "skill-destructive",
             "skill",
             name,
             "its commands use sudo.".into(),
             src,
-        ));
+        );
+        fd.severity = Severity::Warn;
+        out.push(fd);
     }
     if let Some(m) = re(CRED_FILES).find(&commands) {
         out.push(f(
@@ -1039,6 +1084,124 @@ pub fn check_skill(s: &Skill, out: &mut Vec<Finding>) {
     }
 }
 
+// ------------------------------------------------------------------ probe results other than tools
+
+pub fn check_probe_text(p: &Probe, out: &mut Vec<Finding>) {
+    if let Some(ins) = &p.instructions {
+        let subj = p.server.clone();
+        let hits = directive_hits(ins);
+        let uni = hidden_unicode(ins);
+        if !hits.is_empty() || !uni.is_empty() {
+            let mut parts = Vec::new();
+            if !hits.is_empty() {
+                parts.push(format!(
+                    "steering text: {}",
+                    hits.iter()
+                        .map(|h| format!("\"{h}\""))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            if !uni.is_empty() {
+                parts.push(uni.join(", "));
+            }
+            out.push(f(
+                "instructions-poisoning",
+                "server",
+                &subj,
+                format!("initialize instructions contain {}.", parts.join("; ")),
+                None,
+            ));
+        } else {
+            let hosts = hosts_in(ins);
+            out.push(f(
+                "server-instructions",
+                "server",
+                &subj,
+                format!(
+                    "sends {} chars of instructions to the model at startup{}: \"{}\"",
+                    ins.chars().count(),
+                    if hosts.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", naming {}", host_list(&hosts))
+                    },
+                    ins.chars().take(160).collect::<String>().replace('\n', " ")
+                ),
+                None,
+            ));
+        }
+    }
+    for pr in &p.prompts {
+        let subj = format!("{}/{}", pr.server, pr.name);
+        let text = format!("{}\n{}", pr.description, pr.arguments);
+        let hits = directive_hits(&text);
+        let uni = hidden_unicode(&text);
+        if !hits.is_empty() {
+            out.push(f(
+                "prompt-poisoning",
+                "prompt",
+                &subj,
+                format!(
+                    "contains steering text: {}",
+                    hits.iter()
+                        .map(|h| format!("\"{h}\""))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None,
+            ));
+        }
+        if !uni.is_empty() {
+            out.push(f(
+                "prompt-poisoning",
+                "prompt",
+                &subj,
+                format!("contains {}.", uni.join(", ")),
+                None,
+            ));
+        }
+    }
+    for r in &p.resources {
+        let subj = format!(
+            "{}/{}",
+            r.server,
+            if r.name.is_empty() {
+                r.uri.as_str()
+            } else {
+                r.name.as_str()
+            }
+        );
+        let text = format!("{}\n{}\n{}", r.name, r.description, r.uri);
+        let hits = directive_hits(&text);
+        let uni = hidden_unicode(&text);
+        if !hits.is_empty() {
+            out.push(f(
+                "resource-poisoning",
+                "resource",
+                &subj,
+                format!(
+                    "contains steering text: {}",
+                    hits.iter()
+                        .map(|h| format!("\"{h}\""))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                None,
+            ));
+        }
+        if !uni.is_empty() {
+            out.push(f(
+                "resource-poisoning",
+                "resource",
+                &subj,
+                format!("contains {}.", uni.join(", ")),
+                None,
+            ));
+        }
+    }
+}
+
 // ------------------------------------------------------------------ tools (from probe)
 
 fn edit_distance(a: &str, b: &str) -> usize {
@@ -1064,9 +1227,21 @@ pub fn check_tools(tools: &[Tool], out: &mut Vec<Finding>) {
     if tools.is_empty() {
         return;
     }
-    let mut lens: Vec<usize> = tools.iter().map(|t| t.description.len()).collect();
-    lens.sort();
-    let median = lens[lens.len() / 2].max(1);
+    // Median description length per server; a description is oversized relative to its own peers.
+    let mut medians: BTreeMap<&str, usize> = BTreeMap::new();
+    for srv in tools
+        .iter()
+        .map(|t| t.server.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        let mut lens: Vec<usize> = tools
+            .iter()
+            .filter(|t| t.server == srv)
+            .map(|t| t.description.chars().count())
+            .collect();
+        lens.sort();
+        medians.insert(srv, lens[lens.len() / 2].max(1));
+    }
     for t in tools {
         let subj = format!("{}/{}", t.server, t.name);
         let text = format!("{}\n{}", t.title.clone().unwrap_or_default(), t.description);
@@ -1137,17 +1312,14 @@ pub fn check_tools(tools: &[Tool], out: &mut Vec<Finding>) {
             }
             out.push(fd);
         }
-        if t.description.len() > 3000
-            || (t.description.len() > 400 && t.description.len() > median * 8)
-        {
+        let len = t.description.chars().count();
+        let median = *medians.get(t.server.as_str()).unwrap_or(&1);
+        if len > 4000 || (len > 1200 && len > median * 10) {
             out.push(f(
                 "oversized-description",
                 "tool",
                 &subj,
-                format!(
-                    "description is {} chars; the median for this run is {median}.",
-                    t.description.len()
-                ),
+                format!("description is {len} chars; the median for this server is {median}."),
                 None,
             ));
         }
@@ -1169,7 +1341,7 @@ pub fn check_tools(tools: &[Tool], out: &mut Vec<Finding>) {
         };
         let first = body.first().copied().unwrap_or("");
         let read_verb = re(r"^(get|list|read|search|find|estimate|check|describe|show|fetch|query|count|analyze|analyse|detect|validate|verify|preview|browse|lookup|view|inspect|status|explain|compare|calculate|compute|summarize|summarise|extract|parse|retrieve|load|download|scan|test|ping|info|help|is|has|can|who|what|which)$").is_match(first);
-        let write_verb = re(r"^(create|update|delete|remove|write|send|post|execute|exec|run|modify|set|put|upload|install|deploy|kill|drop|insert|patch|publish|push|commit|merge|rename|move|copy|truncate|reset|purge|clear|edit|append|apply|enable|disable|start|stop|restart|add|save|store|submit|trigger|launch|invoke|cancel|revoke|grant|assign|transfer|pay|charge|buy|sell|order|book|schedule|generate|make|build|compile|format|convert|process|repair|fix|rig|animate|resize|remesh|retexture)$").is_match(first);
+        let write_verb = re(r"^(create|update|delete|remove|write|send|post|execute|exec|run|modify|set|put|upload|install|deploy|kill|drop|insert|patch|publish|push|commit|merge|rename|move|copy|truncate|reset|purge|clear|edit|append|apply|enable|disable|start|stop|restart|add|save|store|submit|trigger|launch|invoke|cancel|revoke|grant|assign|transfer|pay|charge|buy|sell|order|book|schedule|launch|deploy)$").is_match(first);
         let writes = write_verb && !read_verb;
         if t.annotation_bool("readOnlyHint") == Some(true) && writes {
             out.push(f("annotation-mismatch", "tool", &subj, format!("annotated readOnlyHint=true but its name starts with `{first}`, a verb that changes something; a host may skip confirmation on the strength of that hint."), None));
