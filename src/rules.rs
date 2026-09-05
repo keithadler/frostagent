@@ -820,6 +820,8 @@ fn placeholder_host(h: &str) -> bool {
         || bare == "www.w3.org"
         || bare.ends_with("schemas.org")
         || bare.ends_with("schema.org")
+        || bare.contains("...")
+        || re(r"\.(jpe?g|png|gif|webp|svg|bmp|tiff?|glb|gltf|obj|fbx|stl|pdf|json|xml|ya?ml|txt|md|html?|js|ts|css|zip|tar|gz|mp[34]|wav|csv|tsv|exe|dmg|pkg|bin|wasm|py|rs|sh)$").is_match(bare)
 }
 
 fn hosts_in(text: &str) -> Vec<String> {
@@ -1185,17 +1187,22 @@ pub fn check_tools(tools: &[Tool], out: &mut Vec<Finding>) {
                 None,
             ));
         }
+        // `query` on a search tool is a search string; on a database tool it is code.
+        let db_like = re(r"(?i)(sql|database|\bdb\b|_db|graphql|cypher|sparql|eval|exec|shell|command|script|kql|promql|jq)").is_match(&t.name.replace(['_', '-'], " "))
+            || re(r"(?i)\b(sql|database|graphql|cypher|sparql|kql|promql|execute|evaluate)\b").is_match(&t.description);
         let mut exec_params = Vec::new();
         if let Some(props) = t.input_schema.get("properties").and_then(|p| p.as_object()) {
             for (k, v) in props {
                 let is_str = v.get("type").map(|x| x == "string").unwrap_or(false);
-                if is_str && re(r"(?i)^(command|cmd|shell|script|code|sql|query|expression|expr|javascript|python|bash|source|program|snippet)$").is_match(k) {
+                let code_param = re(r"(?i)^(command|cmd|shell|script|code|sql|javascript|python|bash|program|snippet|statement|cypher|graphql)$").is_match(k);
+                let query_param =
+                    re(r"(?i)^(query|expression|expr|source|q)$").is_match(k) && db_like;
+                if is_str && (code_param || query_param) {
                     exec_params.push(k.clone());
                 }
             }
         }
-        let exec_name =
-            re(r"(?i)(exec|shell|run_command|runcommand|eval|execute|bash|terminal|sql|query)")
+        let exec_name = re(r"(?i)(exec|shell|run_command|runcommand|eval|execute|bash|terminal|run_sql|sql_query|query_db)")
                 .is_match(&t.name);
         if !exec_params.is_empty() || exec_name {
             let what = if exec_params.is_empty() {
