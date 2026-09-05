@@ -349,6 +349,7 @@ fn legacy_sse_transport_is_probed() {
         "15",
     ]);
     let _ = child.kill();
+    let _ = child.wait();
     let _ = std::fs::remove_dir_all(&tmp);
     assert_eq!(code, 1, "{out}\n{err}");
     assert!(
