@@ -4,7 +4,7 @@ class Frostagent < Formula
   desc "Deny-by-default capability linter for AI agent setups (MCP servers, hooks, permissions, skills)"
   homepage "https://github.com/keithadler/frostagent"
   url "https://github.com/keithadler/frostagent/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "REPLACE_WITH_SHA256"
+  sha256 "19b6daa1fa643a7486f2449f4ee51cdc15cc0fca5bbb191e5471b93975257b32"
   license "MIT"
   head "https://github.com/keithadler/frostagent.git", branch: "main"
 
