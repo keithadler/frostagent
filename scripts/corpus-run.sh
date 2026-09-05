@@ -4,7 +4,7 @@
 # Invariant's poisoned servers for recall. Needs npx, uv and network on first run.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-BIN="${BIN:-./target/release/frostagent}"
+BIN="${BIN:-./target/release/frostagent}"; BIN="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
 RUN=tmp/corpus-run; rm -rf "$RUN"; mkdir -p "$RUN/.claude/skills" "$RUN/.claude/plugins"; cd "$RUN"
 for d in ../corpus/anthropic-skills/skills/*/; do ln -s "$(cd "$d" && pwd)" ".claude/skills/as-$(basename "$d")"; done
 for f in $(find ../corpus/superpowers -name SKILL.md); do d=$(dirname "$f"); ln -s "$(cd "$d" && pwd)" ".claude/skills/sp-$(basename "$d")"; done
@@ -27,5 +27,5 @@ cat > .mcp.json <<'JSON'
   "poison-whatsapp": { "command": "uv", "args": ["run", "--with", "mcp<2", "python", "../corpus/injection-experiments/whatsapp-takeover.py"] }
 }}
 JSON
-echo "== static"; "../../$BIN" scan . --color never --verbose | grep -E "^(FAIL|WARN|INFO)" | awk '{print $1, $2}' | sort | uniq -c | sort -rn
-echo "== probe"; "../../$BIN" probe . --color never --timeout 120 --lock ./frostagent.lock --exit-zero | grep -E "^(FAIL|WARN)|fail," | cut -c1-160
+echo "== static"; "$BIN" scan . --color never --verbose | grep -E "^(FAIL|WARN|INFO)" | awk '{print $1, $2}' | sort | uniq -c | sort -rn
+echo "== probe"; "$BIN" probe . --color never --timeout 120 --lock ./frostagent.lock --exit-zero | grep -E "^(FAIL|WARN)|fail," | cut -c1-160

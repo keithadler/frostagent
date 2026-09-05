@@ -855,7 +855,10 @@ pub fn discover(opts: &Options) -> Setup {
                                 servers_from(
                                     ms,
                                     &cj,
-                                    &format!("projects[{}].", shorten_home(Path::new(path))),
+                                    &format!(
+                                        "projects[{}].mcpServers.",
+                                        shorten_home(Path::new(path))
+                                    ),
                                     true,
                                     "claude-code",
                                     &mut setup.servers,
