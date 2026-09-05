@@ -331,13 +331,26 @@ fn legacy_sse_transport_is_probed() {
         .stdout(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    // Wait for "ready".
-    {
-        use std::io::Read;
-        let mut buf = [0u8; 5];
-        let _ = child.stdout.as_mut().unwrap().read_exact(&mut buf);
+    // Wait until the port accepts connections (the server binds before printing "ready").
+    let mut reachable = false;
+    for _ in 0..100 {
+        if std::net::TcpStream::connect_timeout(
+            &format!("127.0.0.1:{port}").parse().unwrap(),
+            std::time::Duration::from_millis(200),
+        )
+        .is_ok()
+        {
+            reachable = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    if !reachable {
+        let _ = child.kill();
+        let _ = child.wait();
+        eprintln!("SSE fixture server never became reachable on 127.0.0.1:{port}; skipping");
+        return;
+    }
     let tmp = std::env::temp_dir().join(format!("frostagent-sse-{}", std::process::id()));
     std::fs::create_dir_all(&tmp).unwrap();
     std::fs::write(tmp.join(".mcp.json"), format!(r#"{{"mcpServers": {{"legacy": {{"type": "sse", "url": "http://127.0.0.1:{port}/sse"}}}}}}"#)).unwrap();

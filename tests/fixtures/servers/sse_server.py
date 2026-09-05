@@ -35,5 +35,6 @@ class H(BaseHTTPRequestHandler):
         streams["1"].put(out)
 
 port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+srv = ThreadingHTTPServer(("127.0.0.1", port), H)  # bind before announcing
 print("ready", flush=True)
-ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
+srv.serve_forever()
