@@ -258,6 +258,18 @@ A tool argument is passed to a spawned process in the server's source.
 
 **Fix:** Expected for git and build tools. Check the argument cannot select the program itself, then allow it in the policy.
 
+### `result-injection`
+
+A tool result contained text that reads as instructions to the model, arriving through an honest tool.
+
+**Fix:** The tool is fine; the data it fetched is not. Treat the result as untrusted, and consider `frostagent proxy --enforce`, which prefixes such results with a warning the model reads first.
+
+### `tools-changed`
+
+A server announced during a session that its tool list changed.
+
+**Fix:** Legitimate servers rarely do this. The next tools/list is checked against the lockfile; if a tool drifted, the proxy in enforce mode removes it.
+
 ### `probe-side-effect`
 
 A server created files under your home directory just by starting.
@@ -355,4 +367,10 @@ A tool argument selects a filesystem path in the server's source.
 A tool argument selects a network destination in the server's source.
 
 **Fix:** Expected for fetch tools. Know that the model can point it at internal addresses.
+
+### `server-auth`
+
+A remote server requires a sign-in frostagent does not perform, so its tools were not inspected.
+
+**Fix:** Sign in through your client once, then export the token as FROSTAGENT_AUTH_<SERVER_NAME> (the full Authorization header value) and probe again; or accept that this server is checked only by the runtime proxy.
 

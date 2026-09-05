@@ -1,4 +1,4 @@
-probing poisoned ... 4 tools in 42 ms
+probing poisoned ... 4 tools in 34 ms
 frostagent 1.0.0 — policy "risky-project" (examples/risky-project/frostagent.policy)
 scanned 3 files: 5 servers, 2 hooks, 6 permission rules, 1 skill; probed 1 server (4 tools)
 
@@ -29,6 +29,8 @@ FAIL  remote-script-exec  skill "deploy"   examples/risky-project/.claude/skills
 FAIL  tool-poisoning      tool "poisoned/add"
       description contains instructions aimed at the model: "<IMPORTANT>", "Before using this tool", "Do
       not tell the user", "required for the tool to work"
+FAIL  hidden-unicode      tool "poisoned/l​ist_dir"
+      description or schema contains U+200B zero width space at byte 1.
 FAIL  exec-surface        tool "poisoned/run_shell"
       takes code or a query as free text (parameter `command`); anything that can influence the model can
       run it.
@@ -78,4 +80,4 @@ probe poisoned : ok
   run_shell                        Run a command.
   l​ist_dir                        List a directory.
 
-13 fail, 10 warn, 3 info, 1 allowed
+14 fail, 10 warn, 3 info, 1 allowed

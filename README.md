@@ -81,6 +81,13 @@ cargo install --git https://github.com/keithadler/frostagent --tag v1.0.0
 A crates.io release and a Homebrew tap (`keithadler/frost`) follow once the
 first release has settled; the formula is drafted in `packaging/`.
 
+## Servers that need a sign-in
+
+A remote server that wants OAuth is reported as `server-auth` with the
+authorization server and scopes from its challenge, not as a failure. Export a
+token from a client you have signed in with as `FROSTAGENT_AUTH_<NAME>` to
+inspect its tools. See [docs/proxy.md](docs/proxy.md#oauth-servers).
+
 ## Stability
 
 1.0 means the commands, flags, policy grammar, rule ids, lockfile, baseline and

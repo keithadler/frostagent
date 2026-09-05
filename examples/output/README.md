@@ -8,6 +8,7 @@ the repository root.
 | `clean-project.txt` | `frostagent examples/clean-project` |
 | `risky-project.txt` | `frostagent examples/risky-project --verbose` |
 | `risky-project.probe.txt` | `frostagent probe examples/risky-project --only poisoned --verbose` |
+| `risky-project.proxy.txt` | a fixture host driving `frostagent proxy poisoned examples/risky-project --enforce`: poisoned tools gone from the list, a refused call, a flagged result |
 | `risky-project.json` | `--format json` |
 | `risky-project.sarif` | `--format sarif` |
 | `risky-project.github.txt` | `--format github` |

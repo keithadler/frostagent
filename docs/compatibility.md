@@ -24,6 +24,10 @@ ways that break you:
   not removed or retyped.
 - **SARIF** 2.1.0 with one rule per rule id.
 - **GitHub Action inputs**: `args`, `version`.
+- **Proxy**: `frostagent proxy <server> [dir] [--enforce] [--log FILE]`, the
+  JSON-RPC error code `-32001` for refused calls, and the `[frostagent]` prefix
+  on flagged results. Log line keys `ts`, `kind`, `message`, `detail`.
+- **Environment**: `FROSTAGENT_AUTH_<NAME>`, `NO_COLOR`.
 
 What may change in a minor release: heuristics behind a rule (what text counts
 as steering, which hosts are placeholders), the set of config files discovered,

@@ -161,6 +161,15 @@ the 1.0 patterns, one `skill-destructive` warning on `rm -rf "$SESSION_DIR"`
 (a real, if routine, hazard), and `skill-network` on every skill that documents
 `curl` to its vendor's API, which is what that rule is for.
 
+### Runtime
+
+`frostagent proxy` covers what the static checks cannot: a result that arrives
+through an honest tool carrying instructions, a tool list that changes
+mid-session, a call to a tool the server never published. In the test suite a
+poisoned fixture server behind the proxy in enforce mode loses its poisoned
+tools, its blanked instructions, and its call to a removed tool, while an
+injected result reaches the host with a warning in front of it.
+
 ### What this does not show
 
 Twenty-three servers is a sample, not the ecosystem. Every threshold was tuned

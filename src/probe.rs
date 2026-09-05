@@ -430,6 +430,9 @@ fn probe_http(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String
         for (k, v) in &s.headers {
             req = req.set(k, &expand_env(v));
         }
+        if let Some(tok) = auth_override(&s.name) {
+            req = req.set("Authorization", &tok);
+        }
         if let Some(sid) = session {
             req = req.set("Mcp-Session-Id", sid);
         }
@@ -458,16 +461,26 @@ fn probe_http(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String
                 Ok((status, sid, text))
             }
             Err(ureq::Error::Status(code, resp)) => {
+                let challenge = resp
+                    .header("WWW-Authenticate")
+                    .or_else(|| resp.header("www-authenticate"))
+                    .map(String::from);
                 let text = resp.into_string().unwrap_or_default();
                 Err(match code {
-                    401 | 403 => format!(
-                        "HTTP {code}: authentication rejected{}",
-                        if s.headers.is_empty() {
-                            " (no Authorization header configured)"
-                        } else {
-                            ""
+                    401 | 403 => {
+                        let mut msg = format!(
+                            "HTTP {code}: authentication rejected{}",
+                            if s.headers.is_empty() && auth_override(&s.name).is_none() {
+                                " (no Authorization header configured)"
+                            } else {
+                                ""
+                            }
+                        );
+                        if let Some(meta) = oauth_metadata(agent, &url, challenge.as_deref()) {
+                            msg.push_str(&format!("; {meta}"));
                         }
-                    ),
+                        msg
+                    }
                     _ => format!(
                         "HTTP {code}: {}",
                         text.chars().take(200).collect::<String>()
@@ -678,6 +691,9 @@ fn probe_sse(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String>
         for (k, v) in &s.headers {
             req = req.set(k, &expand_env(v));
         }
+        if let Some(tok) = auth_override(&s.name) {
+            req = req.set("Authorization", &tok);
+        }
         match req.send_string(&body.to_string()) {
             Ok(_) => Ok(()),
             Err(ureq::Error::Status(code, _)) => Err(format!("HTTP {code} posting to {post_url}")),
@@ -767,6 +783,88 @@ fn probe_sse(s: &Server, timeout: Duration, p: &mut Probe) -> Result<(), String>
         list("resources/list", p)?;
     }
     Ok(())
+}
+
+/// `FROSTAGENT_AUTH_<SERVER_NAME>`: a full Authorization header value to probe a
+/// server the user has already signed in to elsewhere.
+pub fn auth_override(server: &str) -> Option<String> {
+    let key = format!(
+        "FROSTAGENT_AUTH_{}",
+        server
+            .to_ascii_uppercase()
+            .replace(|c: char| !c.is_ascii_alphanumeric(), "_")
+    );
+    std::env::var(&key)
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .map(|v| {
+            if v.contains(' ') {
+                v
+            } else {
+                format!("Bearer {v}")
+            }
+        })
+}
+
+/// Describe an OAuth-protected server from its 401 challenge and, when
+/// present, its protected-resource metadata document. Read-only GETs; no sign-in.
+fn oauth_metadata(agent: &ureq::Agent, url: &str, challenge: Option<&str>) -> Option<String> {
+    let mut parts = Vec::new();
+    let mut metadata_url = None;
+    if let Some(ch) = challenge {
+        parts.push(format!(
+            "challenge `{}`",
+            ch.chars().take(120).collect::<String>()
+        ));
+        if let Some(c) = regex::Regex::new(r#"resource_metadata="?([^",\s]+)"#)
+            .ok()?
+            .captures(ch)
+        {
+            metadata_url = Some(c[1].to_string());
+        }
+        if let Some(c) = regex::Regex::new(r#"scope="([^"]+)""#).ok()?.captures(ch) {
+            parts.push(format!("scope `{}`", &c[1]));
+        }
+    }
+    if metadata_url.is_none() {
+        // RFC 9728 well-known location for the resource.
+        if let Some(origin) = url
+            .split('/')
+            .take(3)
+            .collect::<Vec<_>>()
+            .get(2)
+            .map(|h| format!("{}//{h}", url.split('/').next().unwrap_or("https:")))
+        {
+            metadata_url = Some(format!("{origin}/.well-known/oauth-protected-resource"));
+        }
+    }
+    if let Some(mu) = metadata_url {
+        if let Ok(resp) = agent.get(&mu).call() {
+            if let Ok(v) = resp.into_json::<serde_json::Value>() {
+                if let Some(servers) = v.get("authorization_servers").and_then(|a| a.as_array()) {
+                    let list: Vec<&str> = servers.iter().filter_map(|x| x.as_str()).collect();
+                    if !list.is_empty() {
+                        parts.push(format!(
+                            "authorization server{} {}",
+                            if list.len() == 1 { "" } else { "s" },
+                            list.join(", ")
+                        ));
+                    }
+                }
+                if let Some(scopes) = v.get("scopes_supported").and_then(|a| a.as_array()) {
+                    let list: Vec<&str> = scopes.iter().filter_map(|x| x.as_str()).collect();
+                    if !list.is_empty() {
+                        parts.push(format!("scopes {}", list.join(" ")));
+                    }
+                }
+            }
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("OAuth sign-in required: {}. Export FROSTAGENT_AUTH_<NAME> with a token from a client you have signed in with to inspect its tools.", parts.join("; ")))
+    }
 }
 
 /// Concatenate the `data:` payloads of an SSE body; return the last complete JSON message.

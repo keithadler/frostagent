@@ -110,6 +110,9 @@ rules! {
     "tool-arg-sql", Info, "a tool argument reaches a database query in the server's source", "Expected for database tools. Make sure the host confirms these calls and the database user is read-only where it can be.";
     "tool-arg-fs", Info, "a tool argument selects a filesystem path in the server's source", "Expected for filesystem tools. Check the server confines paths to its configured roots.";
     "tool-arg-network", Info, "a tool argument selects a network destination in the server's source", "Expected for fetch tools. Know that the model can point it at internal addresses.";
+    "server-auth", Info, "a remote server requires a sign-in frostagent does not perform, so its tools were not inspected", "Sign in through your client once, then export the token as FROSTAGENT_AUTH_<SERVER_NAME> (the full Authorization header value) and probe again; or accept that this server is checked only by the runtime proxy.";
+    "result-injection", Warn, "a tool result contained text that reads as instructions to the model, arriving through an honest tool", "The tool is fine; the data it fetched is not. Treat the result as untrusted, and consider `frostagent proxy --enforce`, which prefixes such results with a warning the model reads first.";
+    "tools-changed", Warn, "a server announced during a session that its tool list changed", "Legitimate servers rarely do this. The next tools/list is checked against the lockfile; if a tool drifted, the proxy in enforce mode removes it.";
     "probe-side-effect", Warn, "a server created files under your home directory just by starting", "Read what it wrote. Config and cache files are common; a generated client id and remote feature flags mean telemetry. Decide, then allow it in the policy or drop the server.";
 }
 
@@ -1286,7 +1289,7 @@ pub fn check_tools(tools: &[Tool], out: &mut Vec<Finding>) {
                 None,
             ));
         }
-        let uni = hidden_unicode(&format!("{text}\n{schema_text}"));
+        let uni = hidden_unicode(&format!("{}\n{text}\n{schema_text}", t.name));
         if !uni.is_empty() {
             out.push(f(
                 "hidden-unicode",

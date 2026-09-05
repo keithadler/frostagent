@@ -4,6 +4,19 @@
 
 Interfaces are now stable; see `docs/compatibility.md` for what that promises.
 
+- **Runtime proxy.** `frostagent proxy <server>` relays the JSON-RPC stream
+  between host and server and checks it live: tool lists against the lockfile
+  and the poisoning rules, tool results for steering text and hidden
+  characters (`result-injection`), `list_changed` notifications
+  (`tools-changed`). `--enforce` removes drifted or poisoned tools, refuses
+  calls to them and to unlisted tools, blanks poisoned startup instructions,
+  and prefixes injected results with a warning. `--log` writes JSON lines.
+- **OAuth servers.** A 401 is reported as `server-auth` with the authorization
+  server and scopes read from the `WWW-Authenticate` challenge and the
+  protected-resource metadata. `FROSTAGENT_AUTH_<NAME>` supplies a token from a
+  signed-in client so the probe can inspect the tools.
+- Hidden characters in a tool's *name* are now caught, not only in its
+  description.
 - **Argument tracing.** For servers whose code is on this machine, including
   npx packages already in the npm cache, tool handler parameters are followed
   through assignments into shell strings, evals, spawned processes, SQL,

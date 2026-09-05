@@ -523,6 +523,33 @@
               }
             },
             {
+              "id": "server-auth",
+              "shortDescription": {
+                "text": "a remote server requires a sign-in frostagent does not perform, so its tools were not inspected"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
+              "id": "result-injection",
+              "shortDescription": {
+                "text": "a tool result contained text that reads as instructions to the model, arriving through an honest tool"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "tools-changed",
+              "shortDescription": {
+                "text": "a server announced during a session that its tool list changed"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "probe-side-effect",
               "shortDescription": {
                 "text": "a server created files under your home directory just by starting"

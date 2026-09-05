@@ -465,3 +465,188 @@ fn source_tracing_reports_argument_flows() {
     assert!(out.contains("server-exec"), "{out}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[cfg(not(windows))]
+#[test]
+fn proxy_checks_tools_live_and_enforces() {
+    if Command::new("python3").arg("--version").output().is_err() {
+        return;
+    }
+    let root: PathBuf = env!("CARGO_MANIFEST_DIR").into();
+    let dir = fixture("bad");
+    let host = root.join("tests/fixtures/servers/host.py");
+    let log = std::env::temp_dir().join(format!("frostagent-proxy-{}.jsonl", std::process::id()));
+    let _ = std::fs::remove_file(&log);
+    // Observe only: everything is forwarded, findings are logged.
+    let out = Command::new("python3")
+        .arg(&host)
+        .args([
+            env!("CARGO_BIN_EXE_frostagent"),
+            "proxy",
+            "poisoned",
+            dir.to_str().unwrap(),
+            "--log",
+            log.to_str().unwrap(),
+            "--call",
+            "add",
+        ])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert!(
+        text.contains("\"read_file\"") && text.contains("\"p1\""),
+        "observe mode forwards every tool:\n{text}\n{err}"
+    );
+    assert!(
+        err.contains("tool-poisoning")
+            && err.contains("instructions-poisoning")
+            && err.contains("result-injection"),
+        "{err}"
+    );
+    let logged = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        logged.lines().count() >= 4 && logged.contains("\"kind\":\"FAIL\""),
+        "{logged}"
+    );
+    // Enforce: poisoned tools disappear, calls to them are refused, injected results are prefixed.
+    let out = Command::new("python3")
+        .arg(&host)
+        .args([
+            env!("CARGO_BIN_EXE_frostagent"),
+            "proxy",
+            "poisoned",
+            dir.to_str().unwrap(),
+            "--enforce",
+            "--call",
+            "read_file",
+        ])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    let tools_line = text
+        .lines()
+        .find(|l| l.contains("\"event\": \"tools\""))
+        .unwrap_or("");
+    assert!(
+        !tools_line.contains("\"read_file\"")
+            && !tools_line.contains("\"p1\"")
+            && !tools_line.contains("ist_dir"),
+        "poisoned tools removed:\n{text}\n{err}"
+    );
+    assert!(
+        tools_line.contains("\"delete_file\""),
+        "honest-looking tools kept:\n{text}"
+    );
+    assert!(
+        text.contains("frostagent blocked the call to `read_file`"),
+        "call refused:
+{text}"
+    );
+    assert!(
+        text.contains("\"instructions\": \"\""),
+        "poisoned instructions blanked:\n{text}"
+    );
+    // A call to a tool that was kept but returns injected text gets a warning prefix.
+    let out = Command::new("python3")
+        .arg(&host)
+        .args([
+            env!("CARGO_BIN_EXE_frostagent"),
+            "proxy",
+            "poisoned",
+            dir.to_str().unwrap(),
+            "--enforce",
+            "--call",
+            "delete_file",
+        ])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(text.contains("\"text\": \"ok\""), "{text}");
+    let _ = std::fs::remove_file(&log);
+    // Unknown server name is a clear error.
+    let (code, _, err) = run(&["proxy", "nope", dir.to_str().unwrap()]);
+    assert_eq!(code, 2);
+    assert!(
+        err.contains("no server named `nope`") && err.contains("known:"),
+        "{err}"
+    );
+}
+
+#[cfg(not(windows))]
+#[test]
+fn oauth_server_is_described_not_just_rejected() {
+    if Command::new("python3").arg("--version").output().is_err() {
+        return;
+    }
+    let root: PathBuf = env!("CARGO_MANIFEST_DIR").into();
+    let port = 19000 + (std::process::id() % 1000) as u16;
+    let mut child = Command::new("python3")
+        .arg(root.join("tests/fixtures/servers/oauth_server.py"))
+        .arg(port.to_string())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut reachable = false;
+    for _ in 0..100 {
+        if std::net::TcpStream::connect_timeout(
+            &format!("127.0.0.1:{port}").parse().unwrap(),
+            std::time::Duration::from_millis(200),
+        )
+        .is_ok()
+        {
+            reachable = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    if !reachable {
+        let _ = child.kill();
+        let _ = child.wait();
+        return;
+    }
+    let tmp = std::env::temp_dir().join(format!("frostagent-oauth-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::write(tmp.join(".mcp.json"), format!("{{\"mcpServers\": {{\"corp\": {{\"type\": \"http\", \"url\": \"http://127.0.0.1:{port}/mcp\"}}}}}}")).unwrap();
+    let (code, out, _) = run(&[
+        "probe",
+        tmp.to_str().unwrap(),
+        "--verbose",
+        "--timeout",
+        "10",
+    ]);
+    assert_eq!(
+        code, 0,
+        "an OAuth server is information, not a failure:\n{out}"
+    );
+    assert!(
+        out.contains("server-auth")
+            && out.contains("auth.fixture.test")
+            && out.contains("mcp:tools"),
+        "{out}"
+    );
+    // With a token the probe gets through.
+    let out = bin()
+        .args([
+            "probe",
+            tmp.to_str().unwrap(),
+            "--verbose",
+            "--timeout",
+            "10",
+        ])
+        .env("FROSTAGENT_AUTH_CORP", "fixture-token")
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        !text.contains("server-auth"),
+        "token override should authenticate:\n{text}"
+    );
+    let _ = child.kill();
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&tmp);
+}

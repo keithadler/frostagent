@@ -6,6 +6,7 @@ mod lock;
 mod model;
 mod policy;
 mod probe;
+mod proxy;
 mod report;
 mod rules;
 mod taint;
@@ -26,6 +27,8 @@ USAGE
   frostagent rules [--markdown]         list every rule with its default severity
   frostagent explain <rule>             what a rule means and how to fix or allow it
   frostagent baseline [dir] [options]   record today's findings so only new ones are reported
+  frostagent proxy <server> [dir] [--enforce] [--log FILE]
+                                        stand between the host and a stdio server; check tools, drift and results live
 
 OPTIONS
   --user               also read per-user config: ~/.claude.json, ~/.claude, Claude Desktop, Cursor
@@ -39,6 +42,8 @@ OPTIONS
   --baseline FILE      hide findings recorded in this file (default: frostagent.baseline.json if present)
   --color MODE         auto (default), always, never; NO_COLOR is honored
   --no-source          skip reading the source of local servers (and of npx packages in the npm cache)
+  --enforce            proxy only: drop drifted or poisoned tools, refuse calls to them, flag injected results
+  --log FILE           proxy only: append one JSON line per event to FILE
   --verbose            show allowed findings and every probed tool
 
 Nothing is uploaded. Probing runs the servers exactly as your agent would, with their configured env.
@@ -61,6 +66,8 @@ struct Args {
     no_source: bool,
     markdown: bool,
     rest: Vec<String>,
+    enforce: bool,
+    log: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -81,6 +88,8 @@ fn parse_args() -> Result<Args, String> {
         markdown: false,
         no_source: false,
         rest: vec![],
+        enforce: false,
+        log: None,
     };
     let raw: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -132,6 +141,11 @@ fn parse_args() -> Result<Args, String> {
             "--verbose" | "-v" => a.verbose = true,
             "--markdown" => a.markdown = true,
             "--no-source" => a.no_source = true,
+            "--enforce" => a.enforce = true,
+            "--log" => {
+                a.log = Some(PathBuf::from(take("--log")?));
+                i += 1;
+            }
             "--baseline" => {
                 a.baseline = Some(PathBuf::from(take("--baseline")?));
                 i += 1;
@@ -148,7 +162,15 @@ fn parse_args() -> Result<Args, String> {
     if let Some(first) = positional.first() {
         if matches!(
             first.as_str(),
-            "scan" | "probe" | "lock" | "init" | "summary" | "rules" | "explain" | "baseline"
+            "scan"
+                | "probe"
+                | "lock"
+                | "init"
+                | "summary"
+                | "rules"
+                | "explain"
+                | "baseline"
+                | "proxy"
         ) {
             a.cmd = positional.remove(0);
         }
@@ -156,6 +178,12 @@ fn parse_args() -> Result<Args, String> {
     if a.cmd == "explain" {
         a.rest = positional;
         return Ok(a);
+    }
+    if a.cmd == "proxy" {
+        if positional.is_empty() {
+            return Err("proxy: which server? `frostagent proxy <server-name> [dir]`".into());
+        }
+        a.rest = vec![positional.remove(0)];
     }
     if let Some(d) = positional.first() {
         a.dir = PathBuf::from(d);
@@ -251,6 +279,46 @@ fn run(args: &Args) -> Result<ExitCode, String> {
         project: args.dir.clone(),
     });
 
+    if args.cmd == "proxy" {
+        let name = &args.rest[0];
+        let Some(server) = proxy::find_server(&setup, name) else {
+            let known: Vec<&str> = setup.servers.iter().map(|s| s.name.as_str()).collect();
+            return Err(format!(
+                "no server named `{name}` in {}{}; known: {}",
+                model::shorten_home(&args.dir),
+                if args.user {
+                    " or the user config"
+                } else {
+                    " (add --user for per-user config)"
+                },
+                if known.is_empty() {
+                    "none".to_string()
+                } else {
+                    known.join(", ")
+                }
+            ));
+        };
+        let (pol, _) = load_policy(args)?;
+        let lock_path = args
+            .lock
+            .clone()
+            .unwrap_or_else(|| args.dir.join(lock::FILE));
+        let code = proxy::run(
+            server,
+            proxy::Options {
+                enforce: args.enforce,
+                log: args.log.clone(),
+                lock_path,
+                policy: pol,
+            },
+        )?;
+        return Ok(if code == 0 {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::from(1)
+        });
+    }
+
     if args.cmd == "init" {
         return init(args, &setup);
     }
@@ -328,13 +396,13 @@ fn run(args: &Args) -> Result<ExitCode, String> {
             }
             if let Some(e) = &p.error {
                 // A remote server that wants a sign-in the agent host performs interactively (OAuth) is not a fault in the config.
-                let oauth = e.contains("no Authorization header configured");
+                let auth = e.contains("authentication rejected");
                 findings.push(rules::Finding {
-                    rule: "probe-failed",
-                    severity: if oauth { rules::Severity::Info } else { rules::Severity::Warn },
+                    rule: if auth { "server-auth" } else { "probe-failed" },
+                    severity: if auth { rules::Severity::Info } else { rules::Severity::Warn },
                     kind: "server",
                     subject: s.name.clone(),
-                    message: if oauth { format!("{e}. The server expects an interactive sign-in that frostagent does not perform; its tools were not inspected.") } else { e.clone() },
+                    message: if auth && !e.contains("OAuth sign-in required") { format!("{e}. Its tools were not inspected; export FROSTAGENT_AUTH_<NAME> with a token from a client you have signed in with, or rely on `frostagent proxy` at runtime.") } else { e.clone() },
                     source: Some(s.source.clone()),
                     allowed_by: None,
                 });
