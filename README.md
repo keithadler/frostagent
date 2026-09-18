@@ -1,5 +1,9 @@
 # frostagent
 
+[![CI](https://github.com/keithadler/frostagent/actions/workflows/ci.yml/badge.svg)](https://github.com/keithadler/frostagent/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/keithadler/frostagent?sort=semver)](https://github.com/keithadler/frostagent/releases/latest)
+[![License](https://img.shields.io/github/license/keithadler/frostagent)](https://github.com/keithadler/frostagent/blob/main/LICENSE)
+
 What may your agent's tools do? A one-screen policy says; the check fails on anything else.
 
 frostagent is a deny-by-default capability linter for AI agent setups. It reads
